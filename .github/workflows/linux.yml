@@ -19,7 +19,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          # The repo is mounted into the Swift container; keep the token out of .git/config.
+          persist-credentials: false
 
       - name: make check
         run: |
@@ -28,7 +31,7 @@ jobs:
 
       - name: Upload the make check log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: make-check-log
           path: make-check.log

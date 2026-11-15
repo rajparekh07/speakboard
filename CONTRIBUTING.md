@@ -87,6 +87,8 @@ Every testing report names the rung that verified the work.
 
 Rung 1 also runs on GitHub. Every push to the branch runs `make check` on a GitHub-hosted Linux runner (`.github/workflows/linux.yml`), and each run uploads its log as the artifact `make-check-log`. Still run `make check` yourself before you push.
 
+To read a run, read its job log with the GitHub job-log tool (`get_job_logs`); it holds the full `make check` output. You can list a run's artifacts, but you cannot download their contents from a session until the owner resolves KEY-54. Do not try, and do not ask the owner for a network change for it.
+
 ## Where code goes
 
 ```

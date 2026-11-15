@@ -81,4 +81,6 @@ These rules have no ADR. They come straight from [MANIFESTO.md](MANIFESTO.md), w
 
 Every push to `feature/sharp-einstein-aydugs` runs `make check` on a GitHub-hosted Linux runner, in the pinned Swift image. The workflow is `.github/workflows/linux.yml`, and each run uploads its log as the artifact `make-check-log`. This is still rung 1: it proves the core, nothing that needs Apple tools. (KEY-7. Not an ADR.)
 
+To read a run, read its job log with the GitHub job-log tool (`get_job_logs`). It holds the full `make check` output. You can list a run's artifacts, but you cannot download their contents from a session until the owner resolves KEY-54. Do not try, and do not ask the owner for a network change for it: KEY-54 is that request. (KEY-7 and KEY-54. Not an ADR.)
+
 There is no macOS CI yet (rung 2). It needs the Xcode project.
