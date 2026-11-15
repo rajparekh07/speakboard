@@ -12,15 +12,18 @@ make check
 
 `make check` runs these steps in order, and stops at the first failure:
 
-1. **Core guard.** It first runs its own self-test, then checks that `Sources/SpeakboardCore` never mentions `FoundationNetworking` or any `URLSession` name.
+1. **Core guard.** It first runs its own self-test, then checks that `Sources/SpeakboardCore` never mentions `FoundationNetworking` or any `URLSession` name. It follows symbolic links, because SwiftPM compiles a linked file into the core.
 2. **Docker ready.** It starts `dockerd` if it is not running, and pulls the Swift image if it is missing.
-3. **Build.** `swift build`
-4. **Tests.** `swift test`
-5. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources` and `Tests`.
+3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` declares no dependencies. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
+4. **Build.** `swift build`
+5. **Tests.** `swift test`
+6. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests` and `scripts`.
 
 It ends with `make check: OK`.
 
 The Swift image is pinned to `swift:6.4.2-resolute` (Swift 6.4.2 on Ubuntu 26.04) in the `Makefile`. To change the Swift version, change `SWIFT_TAG` there, in its own commit.
+
+The image is pinned by tag, not by digest. A tag can be re-pushed to point at a different image, and official images are rebuilt from time to time. On 15 Nov 2026, `swift:6.4.2-resolute` was the image with ID and digest `sha256:0384f00cf80f81064a907c249a0ad56a1648906f65075a95b1827e88de666e21`. Whether to pin by digest is the owner's call.
 
 ### In a fresh agent container
 
@@ -34,6 +37,7 @@ The Swift image is pinned to `swift:6.4.2-resolute` (Swift 6.4.2 on Ubuntu 26.04
 | Target | What it does |
 | -- | -- |
 | `make guard` | The core guard and its self-test only. Needs no Docker |
+| `make guard-deps` | The core dependency guard and its self-test only |
 | `make build` | `swift build` in Docker |
 | `make test` | `swift test` in Docker |
 | `make format-check` | The format check only |
@@ -52,7 +56,7 @@ Each ticket goes through this loop.
 6. A new reviewer reviews the new head. The loop ends when a round approves with no blocker or should-fix open. After 5 rounds, the orchestrator stops and asks the owner.
 7. The orchestrator records each round on the Linear ticket. It moves the ticket to Done once the approved commits are on the branch and their checks pass.
 
-A fresh fixer replaces the builder when the same finding survives two rounds, or when the findings say the approach is wrong.
+A fresh fixer replaces the builder when the same finding survives two rounds, when the findings say the approach is wrong, or when the builder's context has degraded. The orchestrator asks the owner before round 5 if a dispute survives a second reviewer, or if round 3 repeats round 2's findings.
 
 ## Where work lands
 
