@@ -1,14 +1,14 @@
 // Reads the output of `swift package dump-package` on standard input, and fails
 // if the SpeakboardCore target declares any dependency, or sets `path`,
-// `sources` or plugin usages.
+// `sources`, plugin usages or `unsafeFlags`.
 //
 // The core is Foundation only (AGENTS.md, ADR-0005). The core guard reads the
 // folder Sources/SpeakboardCore, so it proves the core clean only while SwiftPM
 // compiles exactly that folder into the core, with nothing added to it. A
-// dependency, a `path` or `sources` that points elsewhere, and a build tool
-// plugin that generates code are three ways around that. This check closes
-// those three ways, not every way: for example, it does not read the target's
-// settings.
+// dependency, a `path` or `sources` that points elsewhere, a build tool plugin
+// that generates code, and an unsafe flag that hands the compiler another file
+// are four ways around that. This check closes those four ways, not every way:
+// it reads only these keys of the target, and other settings are not checked.
 //
 // Run by scripts/core-deps-guard.sh inside the Swift image.
 
@@ -51,4 +51,17 @@ for key in ["path", "sources", "pluginUsages"] {
     }
 }
 
-print("core dependency guard: OK (the SpeakboardCore target declares no dependencies, path, sources or plugins)")
+// Unsafe flags can pass the compiler or linker anything, including a source
+// file from outside the core. Any tool's unsafe flags count.
+guard let settings = (core["settings"] ?? []) as? [[String: Any]] else {
+    fail("the SpeakboardCore target has no readable settings list")
+}
+
+if settings.contains(where: { ($0["kind"] as? [String: Any])?["unsafeFlags"] != nil }) {
+    fail("the SpeakboardCore target sets `unsafeFlags`. The core is built with no unsafe flags.")
+}
+
+print(
+    "core dependency guard: OK (the SpeakboardCore target declares no dependencies, path, sources, plugins"
+        + " or unsafe flags)"
+)

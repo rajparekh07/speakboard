@@ -30,7 +30,7 @@ guard:
 	@scripts/core-guard.sh
 
 # guard-deps: the SpeakboardCore target in Package.swift declares no dependencies
-# and sets no path, sources or plugins.
+# and sets no path, sources, plugins or unsafe flags.
 # Its self-test runs first, for the same reason.
 guard-deps: docker-ready
 	@$(SWIFT_RUN) bash -c 'scripts/core-deps-selftest.sh && scripts/core-deps-guard.sh'

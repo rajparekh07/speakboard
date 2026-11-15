@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # The core dependency guard. Fails if the SpeakboardCore target in Package.swift
 # declares any dependency (another target, or a product of another package), or
-# sets `path`, `sources` or plugins, so the folder the core guard reads is what
-# SwiftPM compiles into the core.
+# sets `path`, `sources`, plugins or unsafe flags. Those are ways to compile
+# code into the core from outside the folder the core guard reads. It does not
+# close every way: see scripts/core-deps-check.swift.
 #
 # It reads the package as SwiftPM evaluates it (`swift package dump-package`),
-# not the text of Package.swift, so no way of writing the manifest gets past it.
+# not the text of Package.swift, so how the manifest is written does not hide
+# those settings from it.
 # Runs inside the Swift image (make guard-deps).
 #
 # Usage: scripts/core-deps-guard.sh [package folder]   (default: .)
