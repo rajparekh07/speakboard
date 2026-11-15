@@ -10,6 +10,9 @@
 # import (`import`, `@preconcurrency import`, `import struct ...`,
 # `canImport(...)`) slips past it.
 #
+# It follows symbolic links (grep -R), because SwiftPM compiles a linked file
+# into the core. A link that points nowhere fails the guard.
+#
 # Usage: scripts/core-guard.sh [folder]   (default: Sources/SpeakboardCore)
 set -euo pipefail
 
@@ -21,7 +24,7 @@ if [ ! -d "$folder" ]; then
 fi
 
 status=0
-matches=$(grep -rnE '\bFoundationNetworking\b|\bURLSession' "$folder") || status=$?
+matches=$(grep -RnE -- '\bFoundationNetworking\b|\bURLSession' "$folder") || status=$?
 
 if [ "$status" -eq 0 ]; then
     echo "core guard: FAIL: forbidden name in $folder" >&2
