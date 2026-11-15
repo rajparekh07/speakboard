@@ -21,7 +21,8 @@ fi
 
 if ! docker info > /dev/null 2>&1; then
     if [ "$(id -u)" -ne 0 ]; then
-        echo "docker-ready: FAIL: the Docker daemon is not running, and starting it needs root" >&2
+        echo "docker-ready: FAIL: the Docker daemon is not running or not reachable by this user." >&2
+        echo "Start it as root (nohup dockerd > /tmp/dockerd.log 2>&1 &), or give this user access to the Docker socket." >&2
         exit 1
     fi
     echo "docker-ready: starting dockerd (log: /tmp/dockerd.log)"

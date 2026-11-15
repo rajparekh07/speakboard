@@ -2,7 +2,7 @@ import Foundation
 import SpeakboardCore
 import Testing
 
-/// The core's source folders are the architecture layout in AGENTS.md.
+/// The core's source folders are the layout in CONTRIBUTING.md ("Where code goes").
 /// This test fails if one of them is removed or renamed without updating it.
 @Suite("Layout of the core")
 struct LayoutOfCoreTests {
