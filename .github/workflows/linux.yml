@@ -1,16 +1,36 @@
+# Rung 1 on GitHub: runs `make check` on every push to the branch, on a
+# GitHub-hosted Linux runner. The Makefile runs Swift in the pinned image
+# (SWIFT_TAG), so CI and a local `make check` use the same image and steps.
+#
+# On a hosted runner the Docker daemon is already running and the runner user
+# can reach it, so scripts/docker-ready.sh skips starting dockerd and only
+# pulls the image.
 name: linux
 
 on:
   push:
+    branches: [feature/sharp-einstein-aydugs]
+
+permissions:
+  contents: read
 
 jobs:
-  probe:
-    runs-on: ubuntu-latest
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: Say hello
-        run: echo "speakboard ci probe" | tee probe.txt
-      - name: Upload probe artifact
+      - uses: actions/checkout@v4
+
+      - name: make check
+        run: |
+          set -o pipefail
+          make check 2>&1 | tee make-check.log
+
+      - name: Upload the make check log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: probe
-          path: probe.txt
+          name: make-check-log
+          path: make-check.log
+          if-no-files-found: error
+          retention-days: 30

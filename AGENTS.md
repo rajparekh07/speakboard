@@ -79,6 +79,6 @@ These rules have no ADR. They come straight from [MANIFESTO.md](MANIFESTO.md), w
 
 ## CI today
 
-There is no CI yet. GitHub refused a workflow file, because the Claude GitHub App does not have the Workflows permission. That is an owner item, KEY-6. The Linux workflow arrives with KEY-7, once the owner grants the permission.
+Every push to `feature/sharp-einstein-aydugs` runs `make check` on a GitHub-hosted Linux runner, in the pinned Swift image. The workflow is `.github/workflows/linux.yml`, and each run uploads its log as the artifact `make-check-log`. This is still rung 1: it proves the core, nothing that needs Apple tools. (KEY-7. Not an ADR.)
 
-Until then, `make check` on rung 1 is the proof for core work. Do not add files under `.github/workflows/`, and do not try another way to get a workflow onto GitHub. (KEY-2, KEY-6 and KEY-7. Not an ADR.)
+There is no macOS CI yet (rung 2). It needs the Xcode project.

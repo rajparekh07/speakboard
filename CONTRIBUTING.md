@@ -81,11 +81,11 @@ Every testing report names the rung that verified the work.
 | Rung | Where | What it can prove | Status today |
 | -- | -- | -- | -- |
 | 1. Linux Swift | The agent's container, Swift in Docker | The core: build, unit tests, formatting | Working. This is `make check` |
-| 2. macOS CI | GitHub Actions macOS runners | The Xcode project builds, simulator tests, screenshots | Not set up. It needs the Workflows permission (KEY-6) and the Xcode project |
+| 2. macOS CI | GitHub Actions macOS runners | The Xcode project builds, simulator tests, screenshots | Not set up. It needs the Xcode project |
 | 3. The owner's Mac | Remote Control from the Claude desktop app | Interactive Xcode, the simulator, Instruments | No Mac yet. Nothing depends on it |
 | 4. A real iPhone | TestFlight | Latency, memory, battery, haptics, the app hop, the microphone. The only rung that proves a budget | No developer account or test iPhone yet |
 
-There is no CI yet, not even for Linux. Until KEY-7 adds the Linux workflow, `make check` on rung 1 is the proof for core work.
+Rung 1 also runs on GitHub. Every push to the branch runs `make check` on a GitHub-hosted Linux runner (`.github/workflows/linux.yml`), and each run uploads its log as the artifact `make-check-log`. Still run `make check` yourself before you push.
 
 ## Where code goes
 
@@ -101,6 +101,7 @@ Sources/SpeakboardCore/    the core: pure Swift, Foundation only, builds on Linu
 Tests/SpeakboardCoreTests/ tests for the core
 scripts/                   the scripts behind make check
 Makefile                   make check
+.github/workflows/         CI: linux.yml runs make check on every push
 ```
 
 These come later, with their own tickets:
@@ -113,7 +114,6 @@ Apple/AppServices/         linked into the app only: audio, speech engines, stor
                            anything that may touch the network
 project.yml                XcodeGen definition of the targets
 Evals/                     typing and dictation evaluation sets
-.github/workflows/         CI, from KEY-7 on
 ```
 
 Put logic in the core whenever you can. It is the fastest place to build and test.
