@@ -133,7 +133,7 @@ These are the owner's calls. Each has a recommended default so work is not block
 1. **Local only, or local with optional cloud?** Recommended: version 1 is local only. Revisit only if our evaluation shows on-device recognition cannot reach par.
 2. **Recognition engine.** Recommended: a bake-off between Apple SpeechAnalyzer, Parakeet on Core ML and WhisperKit, on our own evaluation set, on real iPhones, with the engine behind one protocol. Public benchmarks are vendor-run on Macs. They put all three at roughly 2 to 4% word error rate on clean English and disagree on harder audio.
 3. **Minimum iOS version.** Recommended: iOS 26. It gives one visual target, SpeechAnalyzer and Apple's on-device language model.
-4. **Launch languages.** English only, or multilingual with code-switching from day one. This depends on who the first users are and shapes the engine choice more than anything else. No default: this one needs an answer.
+4. **Launch languages.** Decided by the owner on 15 Nov 2026: English only (ADR-0010). Locale stays a parameter, and layouts, lexicons and rules are data per locale, so a later language is an addition.
 5. **Cleanup model.** Recommended: rules plus a small on-device model first, with a cloud model only as an explicit opt-in later.
 6. **Business model.** The only constraint from this document is no ads and no data.
 
