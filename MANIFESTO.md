@@ -2,7 +2,7 @@
 
 **The keyboard you would keep even if you never spoke. The dictation you would keep even if you never typed.**
 
-> **Status:** v0.1, 15 Nov 2026, draft for owner review. No code exists yet. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
+> **Status:** v0.2, 15 Nov 2026, draft for owner review. v0.2 applies two decisions the owner made on 15 Nov 2026: English only at launch (ADR-0010) and one branch with no pull requests (ADR-0013). No code exists yet. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
 
 ## Why this exists
 
@@ -42,7 +42,7 @@ Five positions that make this ours.
 
 ## Budgets
 
-These are law. A budget changes only through a measured argument in a pull request, never because a deadline slipped. CI fails on a regression.
+These are law. A budget changes only through a measured argument in a reviewed change, recorded on its Linear ticket, never because a deadline slipped. CI fails on a regression.
 
 | Typing | Budget |
 | -- | -- |
@@ -84,7 +84,7 @@ Apple publishes no memory limit for keyboard extensions. Developer reports put t
 
 Par is measured, not claimed. The bar is Wispr Flow and Codex dictation as they ship today.
 
-* **Accuracy on real speech.** Accents, noise, names, jargon and people who switch languages mid-sentence. We evaluate on our own recordings of real dictation, not on a clean academic corpus.
+* **Accuracy on real speech.** Accents, noise, names and jargon, in English for version 1. We evaluate on our own recordings of real dictation, not on a clean academic corpus.
 * **Cleanup.** Punctuation and capitalisation. Fillers removed. Spoken self-corrections resolved, so "Tuesday, no, Wednesday" becomes "Wednesday". Numbers, dates and lists formatted.
 * **Your words.** A personal vocabulary learned on the device from what you type and correct.
 * **Speed.** The budgets above.
