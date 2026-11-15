@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Proves the core dependency guard works: it must pass on a core with no
-# dependencies and fail on each way of adding one. Runs on throwaway packages
+# dependencies and fail on each way of adding one, and on a core that sets
+# `path`, `sources` or plugins. Runs on throwaway packages
 # in .build, never on the real Package.swift. Runs inside the Swift image.
 set -euo pipefail
 
@@ -40,6 +41,13 @@ expect fail "a target, written as .target" \
 expect fail "a product of another package" \
     '.target(name: "SpeakboardCore", dependencies: [.product(name: "Net", package: "net")])'
 expect fail "no SpeakboardCore target" '.target(name: "Net")'
+expect fail "a path to another folder" '.target(name: "SpeakboardCore", path: "Sources/Elsewhere")'
+expect fail "a path to the default folder" '.target(name: "SpeakboardCore", path: "Sources/SpeakboardCore")'
+expect fail "a sources list" '.target(name: "SpeakboardCore", sources: ["../Elsewhere/Net.swift"])'
+expect fail "an empty sources list" '.target(name: "SpeakboardCore", sources: [])'
+expect fail "a build tool plugin" \
+    '.plugin(name: "Gen", capability: .buildTool()), .target(name: "SpeakboardCore", plugins: ["Gen"])'
+expect fail "an empty plugin list" '.target(name: "SpeakboardCore", plugins: [])'
 
 rm -rf "$work"
 

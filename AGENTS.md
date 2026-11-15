@@ -21,7 +21,7 @@ Each rule below names its source and its status.
 
 * **Accepted:** the owner decided it. That is Part 1 of ADR-0001, 0002 and 0003, which is the owner's own instruction, and ADR-0010 and ADR-0013, which the owner answered.
 * **Default in effect:** the ADR is proposed and not accepted. Follow it as a rule until the owner accepts or changes it.
-* **Not an ADR:** the rule comes from the build plan (KEY-1), a ticket, or the orchestrator. It has the authority of this file, below every accepted ADR.
+* **Not an ADR:** the rule comes from the [build plan](https://linear.app/rajparekhinc-shared/document/speakboard-build-plan-v10-accepted-by-the-owner-15-nov-2026-a35c48a4a90d) (KEY-1; the owner accepted v10 on 15 Nov 2026), a ticket, or the orchestrator. "Build plan, section 2.3" and "2.4" below are sections of that document. It has the authority of this file, below every accepted ADR.
 
 ## Where work lands
 
@@ -73,7 +73,7 @@ Each rule below names its source and its status.
 These rules have no ADR. They come straight from [MANIFESTO.md](MANIFESTO.md), which is above every ADR.
 
 * The keyboard extension contains no networking code. (Principle 6, privacy contract 1)
-* No private APIs, and no tricks that break on the next iOS release. (Principle 5)
+* No private APIs, and no tricks that break on the next point release. (Principle 5)
 * Budgets are law. A budget changes only through a measured argument in a reviewed change, recorded on its Linear ticket. (Budgets)
 * The keystroke path allocates nothing. (Budgets)
 

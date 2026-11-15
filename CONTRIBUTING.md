@@ -14,7 +14,7 @@ make check
 
 1. **Core guard.** It first runs its own self-test, then checks that `Sources/SpeakboardCore` never mentions `FoundationNetworking` or any `URLSession` name. It follows symbolic links, because SwiftPM compiles a linked file into the core.
 2. **Docker ready.** It starts `dockerd` if it is not running, and pulls the Swift image if it is missing.
-3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` declares no dependencies. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
+3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` declares no dependencies and sets no `path`, `sources` or plugins, so the core guard's folder is what SwiftPM compiles. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
 4. **Build.** `swift build`
 5. **Tests.** `swift test`
 6. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests` and `scripts`.
