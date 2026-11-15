@@ -10,12 +10,13 @@ SWIFT_IMAGE := swift:$(SWIFT_TAG)
 SWIFT_RUN := docker run --rm -v "$(CURDIR)":/work -w /work \
 	--user "$$(id -u):$$(id -g)" -e HOME=/tmp $(SWIFT_IMAGE)
 
-FORMAT_PATHS := Package.swift Sources Tests
+FORMAT_PATHS := Package.swift Sources Tests scripts
 
-.PHONY: check docker-ready guard build test format-check format clean
+.PHONY: check docker-ready guard guard-deps build test format-check format clean
 
-# check: everything a ticket must pass. Guard, build, tests, format check.
-check: guard docker-ready build test format-check
+# check: everything a ticket must pass. The two core guards, build, tests,
+# format check.
+check: guard docker-ready guard-deps build test format-check
 	@echo "make check: OK"
 
 # docker-ready: start dockerd if needed and make sure the Swift image is present.
@@ -27,6 +28,11 @@ docker-ready:
 guard:
 	@scripts/core-guard-selftest.sh
 	@scripts/core-guard.sh
+
+# guard-deps: the SpeakboardCore target in Package.swift declares no dependencies.
+# Its self-test runs first, for the same reason.
+guard-deps: docker-ready
+	@$(SWIFT_RUN) bash -c 'scripts/core-deps-selftest.sh && scripts/core-deps-guard.sh'
 
 build: docker-ready
 	$(SWIFT_RUN) swift build
