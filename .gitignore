@@ -1,0 +1,15 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode. The project is generated from project.yml and never committed (ADR-0006).
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# Editors and operating systems
+.DS_Store
+.vscode/
+.idea/
+*.swp
