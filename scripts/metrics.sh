@@ -9,7 +9,8 @@
 #                              (make metrics)
 #
 # The tables are Sources/SpeakboardCore/Layout/GeneratedMetrics.swift. Nobody
-# edits them by hand. Runs inside the Swift image, from the repo root.
+# edits them by hand. Runs inside the Swift image, or natively (make
+# check-native), from the repo root.
 set -euo pipefail
 
 mode="${1:?usage: scripts/metrics.sh check|write}"
@@ -28,10 +29,21 @@ pinned() {  # pinned <key>: the value of "<key>: <value>" in the pin file
     printf '%s' "$value"
 }
 
+sha256() {  # sha256 <file>: its SHA-256. macOS has shasum but may have no sha256sum.
+    if command -v sha256sum > /dev/null 2>&1; then
+        sha256sum "$1"
+    elif command -v shasum > /dev/null 2>&1; then
+        shasum -a 256 "$1"
+    else
+        echo "metrics: FAIL: neither sha256sum nor shasum is available" >&2
+        exit 1
+    fi | cut -d ' ' -f 1
+}
+
 verify() {  # verify <file> <pin key>
     local want got
     want=$(pinned "$2")
-    got=$(sha256sum "$tokens/$1" | cut -d ' ' -f 1)
+    got=$(sha256 "$tokens/$1")
     if [ "$got" != "$want" ]; then
         echo "metrics: FAIL: $tokens/$1 has SHA-256 $got, but $pin pins $want (\`$2\`)." >&2
         echo "The pinned export is never edited. To move to a new export, repin it (CONTRIBUTING.md, \"Design tokens\")." >&2

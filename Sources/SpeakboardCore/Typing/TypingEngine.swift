@@ -231,7 +231,7 @@ public struct TypingEngine: Sendable {
     }
 
     /// The space bar. It types a space, except for the double-space full stop: when the "." Shortcut setting is on,
-    /// the previous key was a space that typed a plain space less than `doubleSpaceWindow` ago, and that space
+    /// the previous key was a space that typed a plain space at most `doubleSpaceWindow` ago, and that space
     /// still ends the text and follows a letter or digit (possibly with closing quotes or brackets after it), the
     /// space is deleted and the locale's full stop and space are typed. Apple lists "automatic period upon double
     /// space" (Custom Keyboard guide); its exact conditions are recalled, not measured. Assumptions: no full stop

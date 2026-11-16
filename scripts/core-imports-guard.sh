@@ -55,9 +55,15 @@
 # reports a real import, so a toolchain that writes an empty file always fails
 # there.
 #
-# It follows symbolic links, as SwiftPM does, and fails if `find` fails (for
-# example on a symbolic link loop). Any file name works, newlines included.
-# Runs inside the Swift image (make guard-imports).
+# It follows symbolic links, as SwiftPM does, and fails if `find` fails. On a
+# symbolic link loop the two finds differ, as observed: GNU find -L (Linux, the
+# Swift image) reports the loop and exits 1, so the guard fails; macOS's find
+# -L (macOS 27.0.1) skips the looping link silently, lists each file once and
+# exits 0, so the guard reads every file and judges them. Either way no file is
+# hidden. Any file name works, newlines included.
+# Runs inside the Swift image (make guard-imports), or natively with
+# SWIFT_FRONTEND set by make check-native. Written for bash 3.2 and BSD tools
+# (macOS) as well as Linux.
 #
 # Usage: scripts/core-imports-guard.sh [folder]   (default: Sources/SpeakboardCore)
 # SWIFT_FRONTEND overrides the frontend command (used by the self-test).
@@ -83,7 +89,11 @@ if ! find -L "$folder" -name '*.swift' -type f -print0 > "$work/files" 2> "$work
     exit 1
 fi
 sort -z "$work/files" > "$work/sorted"
-mapfile -d '' -t files < "$work/sorted"
+# Not mapfile: macOS's bash 3.2 has none. read -d '' reads up to each NUL.
+files=()
+while IFS= read -r -d '' file; do
+    files+=("$file")
+done < "$work/sorted"
 [ "${#files[@]}" -gt 0 ] || fail "no Swift files in $folder"
 
 # 1. No conditional compilation.

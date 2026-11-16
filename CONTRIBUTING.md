@@ -35,10 +35,27 @@ The image is pinned by tag, not by digest. A tag can be re-pushed to point at a 
 * If `docker info` fails after the container's worker restarted, and `/tmp/dockerd.log` says "containerd is still running" for a process that no longer exists before `dockerd` exits, a stale `/var/run/docker/containerd/containerd.pid` is the cause. `make check` removes it, and the sockets beside it, before it starts `dockerd`, but only when no `dockerd` is running and the pid's process does not exist.
 * The image is about 1.3 GB to download. Docker Hub rate-limits anonymous pulls, so `make check` pulls from `mirror.gcr.io/library/swift` first and from Docker Hub only if the mirror fails.
 
+### On a Mac
+
+`make check-native` runs the same steps as `make check` without Docker, with the active Swift toolchain:
+
+```sh
+make check-native
+```
+
+It needs Xcode, and Xcode's toolchain must be the active one. With only the Command Line Tools (their Swift is 6.3.3), the tests fail to compile with `no such module 'Testing'`. Check with `xcode-select -p`, which must print a path inside Xcode, and select Xcode with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` if it does not. The scripts are written for the bash 3.2 at `/bin/bash` and the BSD tools macOS ships, so nothing needs installing from Homebrew.
+
+It first checks that every tool the steps use is there (`swift`, `swift format`, the compiler frontend, a SHA-256 tool, and the rest) and fails, naming the tool, if one is not: a missing tool is a failure, never a skip. On macOS it finds the compiler frontend for the core imports guard with `xcrun -f swift-frontend`, and fails if the Command Line Tools are selected. It also fails unless the active Swift is the version the Makefile pins in `SWIFT_TAG` (6.4.2 today; Xcode 27.2 has it), because several of the guards' facts were checked with that version. After an Xcode update that brings another Swift, either select a toolchain with the pinned version, or change `SWIFT_TAG` in its own commit, which moves `make check` and `make check-native` together. Then it runs steps 1 and 3 to 8 above, each guard with its self-test, and ends with `make check-native: OK`. Step 2 is not part of it: it looks after the Docker daemon on a Linux host. (Its self-test says it is skipped on a host with no `/proc`, such as macOS.)
+
+On macOS, `swift test` skips the allocation tests, with a message: there is no heap-allocation counter for macOS yet (KEY-8). Expect 105 of 108 tests to pass and 3 to be skipped. They run on Linux, in `make check`.
+
+The step targets take `NATIVE=1` to run one step on the host too: `guard`, `guard-deps`, `guard-imports`, `metrics-check`, `metrics`, `build`, `test`, `format-check` and `format`, for example `make NATIVE=1 guard-imports`. `make check` refuses `NATIVE=1`, whether it comes from the command line or the environment, so `make check: OK` only ever comes from the pinned image. `make check-native` also works on Linux with Swift installed, but `make check` in Docker stays the check every ticket must pass.
+
 ### Other targets
 
 | Target | What it does |
 | -- | -- |
+| `make check-native` | Every step but Docker ready, on the host, without Docker. See "On a Mac" |
 | `make guard` | The core guard and its self-test only. Needs no Docker |
 | `make guard-deps` | The core dependency guard and its self-test only |
 | `make guard-imports` | The core imports guard and its self-test only |
@@ -60,7 +77,7 @@ Each ticket goes through this loop.
 4. A fresh reviewer reviews the pushed commits against the ticket. It checks the evidence itself. Its verdict is **approve**, **approve with changes** or **rework**. Each finding is a **blocker**, **should-fix** or **nit**.
 5. If the verdict is not approve, the builder fixes every blocker and should-fix, or disputes it in writing with a reason the next reviewer can check. It answers every nit. It pushes the fixes on top.
 6. A new reviewer reviews the new head. The loop ends when a round approves with no blocker or should-fix open. After 5 rounds, the orchestrator stops and asks the owner.
-7. The orchestrator records each round on the Linear ticket. It moves the ticket to Done once the approved commits are on the working branch and their checks pass. Approved work reaches `main` through the pull request, which the orchestrator merges only when the owner says so.
+7. The orchestrator records each round on the Linear ticket. It moves the ticket to Done once the approved commits are on the working branch and their checks pass. Approved work reaches `main` through the ticket's pull request, which the orchestrator merges once the ticket is approved (its reading of the owner's standing rule of 16 Nov 2026; see "Where work lands" below).
 
 A fresh fixer replaces the builder when the same finding survives two rounds, when the findings say the approach is wrong, or when the builder's context has degraded. The orchestrator asks the owner before round 5 if a dispute survives a second reviewer, or if round 3 repeats round 2's findings.
 
@@ -69,7 +86,7 @@ A fresh fixer replaces the builder when the same finding survives two rounds, wh
 There are two branches (ADR-0021, which replaced the one-branch rule of ADR-0013 on 16 Nov 2026):
 
 * `feature/sharp-einstein-aydugs` is the working branch. Every ticket is built on it and pushed to it, one repo-changing ticket at a time, and reviewed there. Reviews are recorded on the Linear ticket.
-* `main` holds work a fresh reviewer has approved. It reaches `main` through one pull request from the working branch. The orchestrator opens it and merges it only when the owner says so in the session. `main` is never red: nothing is merged unless the checks passed on the commit being merged.
+* `main` holds work a fresh reviewer has approved. It reaches `main` through a pull request from the working branch. The owner's standing rule of 16 Nov 2026 is "merge PRs when done instead of large PRs" (recorded on ADR-0021). The orchestrator reads it so: one pull request per ticket, which may also hold a small follow-up ticket built and reviewed with it, opened by the orchestrator and merged by it once a fresh reviewer has approved the ticket. After a merge, the working branch continues from `main`. `main` is never red: nothing is merged unless the checks passed on the commit being merged.
 
 A builder pushes only to the working branch. It never pushes to `main`, never creates a branch, and never opens or merges a pull request.
 
@@ -93,7 +110,7 @@ Every testing report names the rung that verified the work.
 | -- | -- | -- | -- |
 | 1. Linux Swift | The agent's container, Swift in Docker | The core: build, unit tests, formatting | Working. This is `make check` |
 | 2. macOS CI | GitHub Actions macOS runners | The Xcode project builds, simulator tests, screenshots | Not set up. It needs the Xcode project |
-| 3. The owner's Mac | Remote Control from the Claude desktop app | Interactive Xcode, the simulator, Instruments | No Mac yet. Nothing depends on it |
+| 3. The owner's Mac | Remote Control from the Claude desktop app | Interactive Xcode, the simulator, Instruments | Working for the core's checks: `make check-native` runs them natively there, by hand (KEY-57), except the 3 heap-allocation tests, which skip on macOS until there is a macOS allocation counter (KEY-8) and run only in `make check` on Linux. Nothing else runs there yet |
 | 4. A real iPhone | TestFlight | Latency, memory, battery, haptics, the app hop, the microphone. The only rung that proves a budget | No developer account or test iPhone yet |
 
 Rung 1 also runs on GitHub. Every push to the working branch or to `main` runs `make check` on a GitHub-hosted Linux runner (`.github/workflows/linux.yml`), and each run uploads its log as the artifact `make-check-log`. Still run `make check` yourself before you push.

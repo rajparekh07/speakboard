@@ -9,18 +9,27 @@ trap 'rm -rf "$work"' EXIT
 
 failures=0
 
-report() {  # report pass|fail <description> <folder to guard>
-    local want="$1" description="$2" folder="$3"
-    if "$guard" "$folder" > /dev/null 2>&1; then got=pass; else got=fail; fi
-    if [ "$got" = "$want" ]; then
-        echo "core guard self-test: ok: $description ($want)"
-    else
+# A failing case must fail with its own message, so it cannot pass by failing for another reason (for example,
+# a grep that cannot read a linked file, where the case wants the forbidden name found).
+forbidden="FAIL: forbidden name in"
+
+report() {  # report pass|fail <description> <folder to guard> [text the failure message must contain]
+    local want="$1" description="$2" folder="$3" message="${4:-$forbidden}" output got
+    if output=$("$guard" "$folder" 2>&1); then got=pass; else got=fail; fi
+    if [ "$got" != "$want" ]; then
         echo "core guard self-test: WRONG: $description (wanted $want, got $got)" >&2
+        echo "$output" >&2
         failures=$((failures + 1))
+    elif [ "$want" = fail ] && ! grep -qF -- "$message" <<< "$output"; then
+        echo "core guard self-test: WRONG: $description (failed, but not with \"$message\")" >&2
+        echo "$output" >&2
+        failures=$((failures + 1))
+    else
+        echo "core guard self-test: ok: $description ($want)"
     fi
 }
 
-expect() {  # expect pass|fail <description> <swift source>
+expect() {  # expect pass|fail <description> <swift source>: a failure must name the forbidden name
     local dir="$work/case$RANDOM"
     mkdir -p "$dir/Area"
     printf '%s\n' "$3" > "$dir/Area/Case.swift"
@@ -52,9 +61,9 @@ report fail "a symlinked folder" "$work/linked-folder"
 
 mkdir -p "$work/dangling/Area"
 ln -s "$work/does-not-exist.swift" "$work/dangling/Area/Gone.swift"
-report fail "a link that points nowhere" "$work/dangling"
+report fail "a link that points nowhere" "$work/dangling" "FAIL: grep could not read"
 
-report fail "a missing folder" "$work/missing"
+report fail "a missing folder" "$work/missing" "FAIL: folder not found"
 
 if [ "$failures" -ne 0 ]; then
     echo "core guard self-test: FAIL ($failures wrong)" >&2
