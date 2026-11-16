@@ -151,10 +151,51 @@ mkdir -p "$work/empty" "$work/good/Area"
 printf 'import Foundation\n' > "$work/good/Area/Case.swift"
 check fail "no Swift files" "no Swift files" "$guard" "$work/empty"
 check fail "a missing folder" "folder not found" "$guard" "$work/missing"
-mkdir -p "$work/loop/Area"
-printf 'import Foundation\n' > "$work/loop/Area/Case.swift"
-ln -s .. "$work/loop/Area/Loop"
-check fail "a symbolic link loop (find fails)" "could not list the Swift files" "$guard" "$work/loop"
+# find fails (exit 1, a message on stderr). A fake find on PATH, as for grep below, so the case does not depend on
+# what the platform's find does with any particular tree.
+mkdir -p "$work/broken-find"
+printf '#!/bin/sh\necho "find: read error" >&2\nexit 1\n' > "$work/broken-find/find"
+chmod +x "$work/broken-find/find"
+check fail "find fails" "could not list the Swift files in $work/good" \
+    env PATH="$work/broken-find:$PATH" "$guard" "$work/good"
+
+# A symbolic link loop. GNU find -L reports it and exits 1, so the guard fails with "could not list the Swift
+# files". macOS's find -L skips the looping link silently, lists each file once and exits 0, so the guard reads
+# the files. Either way a loop must not hide a file, nor make the guard hang or read a file twice:
+# - beside a loop, a file that imports Dispatch fails the guard, by either path;
+# - beside a loop, a clean file either fails the guard with "could not list" or passes with exactly 1 file read.
+mkdir -p "$work/loop-dispatch/Area" "$work/loop-clean/Area"
+printf 'import Dispatch\n' > "$work/loop-dispatch/Area/Case.swift"
+ln -s .. "$work/loop-dispatch/Area/Loop"
+printf 'import Foundation\n' > "$work/loop-clean/Area/Case.swift"
+ln -s .. "$work/loop-clean/Area/Loop"
+loop_case() {  # loop_case <description> <folder> <text a pass must contain, or "" if it must fail> <failure text>...
+    local description="$1" folder="$2" passing="$3" output wanted message
+    shift 3
+    if output=$("$guard" "$folder" 2>&1); then
+        if [ -n "$passing" ] && grep -qF -- "$passing" <<< "$output"; then
+            echo "core imports guard self-test: ok: $description (pass: $passing)"
+            return
+        fi
+        wanted="${passing:+pass with \"$passing\", or }fail"
+    else
+        for message in "$@"; do
+            if grep -qF -- "$message" <<< "$output"; then
+                echo "core imports guard self-test: ok: $description (fail: $message)"
+                return
+            fi
+        done
+        wanted="fail with one of:"
+        for message in "$@"; do wanted="$wanted \"$message\""; done
+    fi
+    echo "core imports guard self-test: WRONG: $description (wanted $wanted)" >&2
+    echo "$output" >&2
+    failures=$((failures + 1))
+}
+loop_case "a symbolic link loop beside a file importing Dispatch" "$work/loop-dispatch" "" \
+    "could not list the Swift files" "Case.swift imports Dispatch"
+loop_case "a symbolic link loop beside a clean file" "$work/loop-clean" "(1 files in $work/loop-clean:" \
+    "could not list the Swift files"
 mkdir -p "$work/newline/Area"
 printf 'import Dispatch\n' > "$work/newline/Area/Odd
 name.swift"

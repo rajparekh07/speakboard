@@ -110,7 +110,7 @@ Every testing report names the rung that verified the work.
 | -- | -- | -- | -- |
 | 1. Linux Swift | The agent's container, Swift in Docker | The core: build, unit tests, formatting | Working. This is `make check` |
 | 2. macOS CI | GitHub Actions macOS runners | The Xcode project builds, simulator tests, screenshots | Not set up. It needs the Xcode project |
-| 3. The owner's Mac | Remote Control from the Claude desktop app | Interactive Xcode, the simulator, Instruments | No Mac yet. Nothing depends on it |
+| 3. The owner's Mac | Remote Control from the Claude desktop app | Interactive Xcode, the simulator, Instruments | Working for the core's checks: `make check-native` runs them natively there, by hand (KEY-57). Nothing else runs there yet |
 | 4. A real iPhone | TestFlight | Latency, memory, battery, haptics, the app hop, the microphone. The only rung that proves a budget | No developer account or test iPhone yet |
 
 Rung 1 also runs on GitHub. Every push to the working branch or to `main` runs `make check` on a GitHub-hosted Linux runner (`.github/workflows/linux.yml`), and each run uploads its log as the artifact `make-check-log`. Still run `make check` yourself before you push.
