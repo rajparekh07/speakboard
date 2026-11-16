@@ -2,7 +2,7 @@
 
 **The keyboard you would keep even if you never spoke. The dictation you would keep even if you never typed.**
 
-> **Status:** v0.2, accepted by the owner on 16 Nov 2026. v0.2 applies two decisions the owner made on 15 Nov 2026: English only at launch (ADR-0010) and one branch with no pull requests (ADR-0013). Only the repo skeleton exists so far. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
+> **Status:** v0.2, accepted by the owner on 16 Nov 2026. v0.2 applies the owner's decision of 15 Nov 2026 that version 1 is English only (ADR-0010). It was edited on 16 Nov 2026 for the owner's decision of that day (ADR-0021): reviewed work reaches `main` through a pull request, which replaces the one-branch rule (ADR-0013). Only the repo skeleton and the letters layout model exist so far. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
 
 ## Why this exists
 
@@ -42,7 +42,7 @@ Five positions that make this ours.
 
 ## Budgets
 
-These are law. A budget changes only through a measured argument in a reviewed change, recorded on its Linear ticket, never because a deadline slipped. CI fails on a regression.
+These are law. A budget changes only through a measured argument in a reviewed pull request, recorded on its Linear ticket, never because a deadline slipped. CI fails on a regression.
 
 | Typing | Budget |
 | -- | -- |
