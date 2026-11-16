@@ -186,6 +186,75 @@ struct ShiftTests {
         #expect(typist.shift == .off)
     }
 
+    @Test(
+        "A Shift tapped off stays off through a context change with the same context (KEY-22 review round 1)",
+        arguments: [Autocapitalization.sentences, .words, .allCharacters])
+    func userOffSurvivesSameContext(type: Autocapitalization) {
+        var typist = Typist(Field(text: "Hi. ", autocapitalization: type))
+        #expect(typist.shift == .automatic)
+        typist.press(.shift)
+        #expect(typist.shift == .off)
+        typist.press(.contextChanged)
+        typist.press(.contextChanged)
+        #expect(typist.shift == .off)
+        typist.type("a")
+        #expect(typist.text == "Hi. a")
+    }
+
+    @Test("The user's \"off\" ends at the next key that changes text; then a context change reads the field again")
+    func userOffEndsWithText() {
+        for key in [KeyEvent.character("a"), .space, .returnKey, .deleteDown] {
+            var typist = Typist(Field(text: "Hi. x"))
+            typist.field.text = "Hi. "
+            typist.press(.contextChanged)
+            #expect(typist.shift == .automatic, "\(key)")
+            typist.press(.shift)
+            typist.press(key)
+            typist.press(.deleteUp)
+            typist.field.text = "Hi. "
+            typist.press(.contextChanged)
+            #expect(typist.shift == .automatic, "after \(key)")
+        }
+    }
+
+    @Test("The user's \"off\" also survives a move to another sentence start (assumption: the engine cannot tell)")
+    func userOffSurvivesMove() {
+        var typist = Typist(Field(text: "Hi. "))
+        typist.press(.shift)
+        typist.field.text = "One. Two. "
+        typist.press(.contextChanged)
+        #expect(typist.shift == .off)
+    }
+
+    @Test("Keys that change no text keep the user's \"off\": Delete's touch-up, a disabled Return, an empty tick")
+    func userOffKeptWithoutText() {
+        var typist = Typist(Field(text: "Hi. ", enablesReturnKeyAutomatically: true))
+        typist.press(.shift)
+        typist.press(.deleteUp)
+        typist.press(.tick)
+        typist.press(.contextChanged)
+        #expect(typist.shift == .off)
+
+        var empty = Typist(Field(enablesReturnKeyAutomatically: true))
+        empty.press(.shift)
+        empty.press(.returnKey)
+        empty.press(.contextChanged)
+        #expect(empty.shift == .off)
+    }
+
+    @Test("Every Unicode uppercase mapping is at most 15 UTF-8 bytes, so a shifted character is stored inline")
+    func uppercaseMappingsAreSmall() {
+        var longest = 0
+        var value: UInt32 = 0
+        while value <= 0x10FFFF {
+            if let scalar = Unicode.Scalar(value), scalar.properties.changesWhenUppercased {
+                longest = max(longest, scalar.properties.uppercaseMapping.utf8.count)
+            }
+            value += 1
+        }
+        #expect(longest > 1 && longest <= 15, "the longest uppercase mapping is \(longest) bytes")
+    }
+
     @Test("Shift uppercases with Unicode's case mapping, beyond ASCII")
     func uppercaseMapping() {
         var typist = Typist(Self.plain)

@@ -27,7 +27,7 @@ struct DoubleSpaceTests {
 
     @Test(
         "After a letter, a digit, or closing quotes or brackets after one",
-        arguments: ["hi", "Hi", "2", "\"hi\"", "(see 2)", "\u{201C}ok\u{201D}", "café"])
+        arguments: ["hi", "Hi", "2", "\"hi\"", "(see 2)", "\u{201C}ok\u{201D}", "café", "hi\u{301}", "cafe\u{301}\""])
     func eligible(text: String) {
         #expect(Self.doubleSpace(after: text).0 == text + ". ")
     }

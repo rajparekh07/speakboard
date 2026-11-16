@@ -96,9 +96,15 @@ struct DeleteTests {
 
     @Test("A late tick does every repeat that is due, but deletes at most the context and one character more")
     func lateTick() {
+        // The third repeat, from the configuration: a character or a word repeat, whatever deleteCharacterRepeats
+        // is. Touch-down leaves "ab"; repeats 1 and 2 delete "b" and "a", and repeat 3 the one character more.
+        func gap(after repeats: Int) -> Double {
+            repeats < timings.deleteCharacterRepeats ? timings.deleteRepeatInterval : timings.deleteWordRepeatInterval
+        }
+        let third = timings.deleteInitialDelay + gap(after: 1) + gap(after: 2)
         var typist = Typist(Field(text: "abc"))
         typist.press(.deleteDown, at: 0)
-        let catchUp = typist.press(.tick, at: timings.deleteInitialDelay + timings.deleteRepeatInterval * 2.5)
+        let catchUp = typist.press(.tick, at: third + gap(after: 3) / 2)
         #expect(catchUp.deleteCount == 3)
         #expect(typist.text == "")
 

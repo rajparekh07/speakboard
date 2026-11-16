@@ -80,3 +80,12 @@ struct Typist {
         }
     }
 }
+
+extension TypingEngine {
+    /// Whether autocapitalisation alone would turn Shift on in `context`: what a fresh engine reads there.
+    static func wouldCapitalize(_ context: TypingContext, settings: TypingSettings) -> Bool {
+        guard var engine = TypingEngine(locale: .english, settings: settings) else { return false }
+        _ = engine.handle(.contextChanged, at: 0, in: context)
+        return engine.shiftState == .automatic
+    }
+}

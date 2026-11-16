@@ -45,8 +45,8 @@ public struct TypingTimings: Equatable, Sendable {
         deleteInitialDelay: 0.5,
         // Estimate, not measured: about ten characters a second.
         deleteRepeatInterval: 0.1,
-        // Estimate, not measured: words start about two seconds into the hold (0.5 + 15 × 0.1 s after the first
-        // repeat).
+        // Estimate, not measured: words start about two seconds into the hold. The 16 character repeats are at
+        // 0.5 s to 0.5 + 15 × 0.1 = 2.0 s after touch-down, and the first word repeat 0.25 s later, at 2.25 s.
         deleteCharacterRepeats: 16,
         // Estimate, not measured: words go slower than characters.
         deleteWordRepeatInterval: 0.25)

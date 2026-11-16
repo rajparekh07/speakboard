@@ -59,7 +59,8 @@ public enum Autocapitalization: Equatable, Sendable, CaseIterable {
 ///
 /// Apple documents what each kind indicates, not its title or its colour. Key rendering (KEY-15) draws those from
 /// measurement (ADR-0003), not from this type. To the engine every kind behaves the same: Return inserts a line
-/// break, and the field decides what that does.
+/// break, and the field decides what that does. That is recalled, not measured, and not documented by Apple: see
+/// `TypingEngine`'s Return handling.
 public enum ReturnKeyType: Equatable, Sendable, CaseIterable {
     /// "Accept the user's input." UIKit's default.
     case `default`
@@ -89,6 +90,12 @@ public enum ReturnKeyType: Equatable, Sendable, CaseIterable {
 
 /// What the keyboard can see of the text field when a key event happens. The caller passes the context as it is
 /// when the event happens, after applying every earlier output.
+///
+/// That last point is a question about iOS that the adapter depends on, not yet answered: whether
+/// `documentContextBeforeInput` already shows the keyboard's own `insertText` and `deleteBackward` by the next touch.
+/// If it lags, the double-space full stop sees the text without its first space and types two spaces, and a word
+/// delete counts from stale text. A device test (rung 4) must settle it; if it lags, the adapter has to apply the
+/// outputs to its own copy of the context.
 public struct TypingContext: Equatable, Sendable {
     /// The text before the insertion point, as far as the field shares it: iOS's `documentContextBeforeInput`, or
     /// "" when that is nil. iOS may give only part of the text, so the engine reads only its end, and reads ""

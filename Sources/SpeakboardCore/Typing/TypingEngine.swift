@@ -18,8 +18,12 @@
 //
 // Handling an event allocates nothing (MANIFESTO.md, Budgets: "Allocations in
 // the keystroke path: zero"). The state is plain values. Every string the
-// engine returns is a literal or a single character, short enough to be stored
-// inline, never on the heap. Text is read with indices in `while` loops,
+// engine returns is a literal of at most 2 bytes (" ", "\n", ". "), one
+// character key's scalar, or that scalar's Unicode uppercase mapping. The
+// longest uppercase mapping is 3 scalars and 6 UTF-8 bytes (U+0390 and others,
+// measured with the pinned Swift 6.4.2; ShiftTests checks every scalar), and
+// Swift stores a string of up to 15 UTF-8 bytes inline, in the String value
+// itself, so none of them is on the heap. Text is read with indices in `while` loops,
 // because a `for`-`in` loop calls generic iterator code that allocates in a
 // debug build. TypingAllocationTests proves it on Linux.
 //
@@ -29,6 +33,14 @@
 // behaviour is not known, and the engine picks one.
 
 /// A key event, from touch handling.
+///
+/// Notes for the keyboard extension's adapter and touch handling (KEY-24), which build on these events:
+/// - There is no event yet for a key that types nothing (123, globe, the mic). Such a key cannot cancel a pending
+///   double tap on Shift or a pending double space: a Shift tap, 123, then a quick Shift tap still locks.
+/// - Shift is a tap. Holding Shift while typing letters (uppercase while held, off on release) will need Shift
+///   down and up events; they do not exist yet.
+/// - Send `.deleteUp` when Delete's touch ends for any reason, `touchesCancelled` included. Until `.deleteUp` or
+///   another key arrives, the hold goes on deleting at every `.tick`.
 public enum KeyEvent: Equatable, Sendable {
     /// A character key, with the character it shows in lowercase: a letter key's `KeyKind.letter` scalar. The
     /// engine uppercases it when Shift is on.
@@ -46,8 +58,9 @@ public enum KeyEvent: Equatable, Sendable {
     /// The caller's timer fired, at the time an earlier output's `nextTick` asked for (or later).
     case tick
     /// The text or the insertion point changed outside the engine (on iOS, `textDidChange`), or the keyboard
-    /// appeared. The engine updates the automatic Shift state from the new context and changes nothing else, so it
-    /// is safe to send as often as the caller likes.
+    /// appeared. The engine updates the automatic Shift state from the new context and changes nothing else. It
+    /// never undoes the user's own choice: a manual Shift, caps lock, and a Shift the user tapped off all stay, so
+    /// it is safe to send as often as the caller likes.
     case contextChanged
 }
 
@@ -107,6 +120,9 @@ public struct TypingEngine: Sendable {
     public private(set) var shiftState: ShiftState = .off
 
     let rules: TypingRules
+    /// Whether the user's last Shift tap turned Shift off, and no key has typed or deleted text since. While it is
+    /// true, a context change leaves Shift off (see `contextChanged`).
+    private(set) var userTurnedShiftOff = false
     /// The time of the last tap on Shift, while a second tap could still lock it.
     private var lastShiftTap: Double?
     /// The time of the last tap on the space bar, while it was a plain space and a second tap could still turn it
@@ -170,7 +186,8 @@ public struct TypingEngine: Sendable {
     private mutating func character(_ scalar: Unicode.Scalar, in context: TypingContext) -> TypingOutput {
         endOtherKeyState()
         let insertion = shiftState.isOn ? scalar.properties.uppercaseMapping : String(Character(scalar))
-        updateAutomaticShift(context, end: context.textBeforeCursor.endIndex, inserting: insertion, keepManual: false)
+        updateAutomaticShift(
+            context, end: context.textBeforeCursor.endIndex, inserting: insertion, keepUserChoice: false)
         return TypingOutput(insertion: insertion)
     }
 
@@ -184,9 +201,11 @@ public struct TypingEngine: Sendable {
         if settings.capsLock, let last = lastShiftTap, Self.within(time - last, timings.shiftDoubleTapWindow) {
             shiftState = .locked
             lastShiftTap = nil
+            userTurnedShiftOff = false
             return TypingOutput()
         }
         shiftState = shiftState == .off ? .manual : .off
+        userTurnedShiftOff = shiftState == .off
         lastShiftTap = time
         return TypingOutput()
     }
@@ -208,22 +227,26 @@ public struct TypingEngine: Sendable {
             lastSpace = nil
             let insertion = rules.doubleSpaceInsertion
             let end = text.index(before: text.endIndex)
-            updateAutomaticShift(context, end: end, inserting: insertion, keepManual: false)
+            updateAutomaticShift(context, end: end, inserting: insertion, keepUserChoice: false)
             return TypingOutput(deleteCount: 1, insertion: insertion)
         }
         lastSpace = time
-        updateAutomaticShift(context, end: text.endIndex, inserting: " ", keepManual: false)
+        updateAutomaticShift(context, end: text.endIndex, inserting: " ", keepUserChoice: false)
         return TypingOutput(insertion: " ")
     }
 
-    /// Return. It inserts a line break, "\n", whatever the field's Return key kind: Apple's Custom Keyboard guide
-    /// inserts "\n" through the document proxy, and returnKeyType's documentation says the field typically
-    /// dismisses the keyboard, which is the field's doing, not the keyboard's. When the Return key is disabled
-    /// (`returnKey(in:)`) a tap does nothing.
+    /// Return. It inserts a line break, "\n", whatever the field's Return key kind. When the Return key is disabled
+    /// (`returnKey(in:)`) a tap does nothing; that part is documented (`enablesReturnKeyAutomatically`).
+    ///
+    /// Recalled, not measured: that a custom keyboard sends "\n" for every kind, Go and Search included, and that
+    /// the field acts on it (sends, searches, dismisses the keyboard). Apple's Custom Keyboard guide shows only
+    /// `insertText("\n")` inserting a newline in a text view, and returnKeyType's documentation says pressing the
+    /// key "typically results in the system dismissing the keyboard" without saying how. A device test must settle
+    /// it.
     private mutating func returnKey(_ context: TypingContext) -> TypingOutput {
         endOtherKeyState()
         guard returnKey(in: context).isEnabled else { return TypingOutput() }
-        updateAutomaticShift(context, end: context.textBeforeCursor.endIndex, inserting: "\n", keepManual: false)
+        updateAutomaticShift(context, end: context.textBeforeCursor.endIndex, inserting: "\n", keepUserChoice: false)
         return TypingOutput(insertion: "\n")
     }
 
@@ -237,7 +260,7 @@ public struct TypingEngine: Sendable {
         deleteHold = DeleteHold(nextRepeat: time + timings.deleteInitialDelay, repeatsDone: 0)
         let text = context.textBeforeCursor
         let end = text.isEmpty ? text.endIndex : text.index(before: text.endIndex)
-        updateAutomaticShift(context, end: end, inserting: "", keepManual: false)
+        updateAutomaticShift(context, end: end, inserting: "", keepUserChoice: false)
         return TypingOutput(deleteCount: 1)
     }
 
@@ -292,14 +315,21 @@ public struct TypingEngine: Sendable {
             hold.nextRepeat += repeatInterval(after: hold.repeatsDone)
         }
         deleteHold = hold
-        updateAutomaticShift(context, end: end, inserting: "", keepManual: false)
+        updateAutomaticShift(context, end: end, inserting: "", keepUserChoice: false)
         return TypingOutput(deleteCount: count)
     }
 
-    /// The context changed outside the engine. Automatic Shift follows the new context; a manual Shift and caps
-    /// lock stay, and nothing else changes. Assumption: moving the cursor keeps a manual Shift.
+    /// The context changed outside the engine. Automatic Shift follows the new context, and nothing else changes.
+    /// The user's own choice stays: caps lock, a manual Shift, and a Shift the user tapped off.
+    ///
+    /// Assumptions, not measured: moving the cursor keeps a manual Shift; and a Shift the user tapped off stays off
+    /// through any context change, until the next key that types or deletes text (a character, a space, an enabled
+    /// Return, Delete's touch-down, or a repeat that deletes) or the next Shift tap. The engine cannot tell a context
+    /// change at the same place (iOS repeating `textDidChange`) from a move to another place without storing the
+    /// text, which it does not, so it keeps the user's "off" in both: after tapping Shift off and moving the cursor to
+    /// a sentence start, the next letter is lowercase.
     private mutating func contextChanged(_ context: TypingContext) -> TypingOutput {
-        updateAutomaticShift(context, end: context.textBeforeCursor.endIndex, inserting: "", keepManual: true)
+        updateAutomaticShift(context, end: context.textBeforeCursor.endIndex, inserting: "", keepUserChoice: true)
         return TypingOutput()
     }
 
@@ -314,11 +344,15 @@ public struct TypingEngine: Sendable {
     // MARK: Autocapitalisation
 
     /// Sets Shift from autocapitalisation for the text as it will be after the output: the context's text up to
-    /// `end`, then `insertion`. Caps lock is never changed; a manual Shift is kept when `keepManual` is true.
+    /// `end`, then `insertion`. Caps lock is never changed. When `keepUserChoice` is true, a manual Shift and a
+    /// Shift the user tapped off are kept too; when it is false (a key typed or deleted text), the user's "off"
+    /// ends here.
     private mutating func updateAutomaticShift(
-        _ context: TypingContext, end: String.Index, inserting insertion: String, keepManual: Bool
+        _ context: TypingContext, end: String.Index, inserting insertion: String, keepUserChoice: Bool
     ) {
-        if shiftState == .locked || (keepManual && shiftState == .manual) { return }
+        if shiftState == .locked { return }
+        if keepUserChoice && (shiftState == .manual || userTurnedShiftOff) { return }
+        userTurnedShiftOff = false
         var text = BackwardScalars(base: context.textBeforeCursor, end: end, tail: insertion)
         shiftState = capitalizes(&text, context.autocapitalization) ? .automatic : .off
     }
@@ -360,14 +394,25 @@ public struct TypingEngine: Sendable {
     }
 
     /// Whether `text` ends with a space (U+0020) that follows a letter or digit, possibly with closing quotes or
-    /// brackets between them.
+    /// brackets between them. It reads characters (grapheme clusters) by their first scalar, as the word delete
+    /// does, so a letter followed by combining marks ("i" and U+0301) counts as a letter.
     private func followsAWord(afterTrailingSpace text: String) -> Bool {
-        var scalars = BackwardScalars(base: text, end: text.endIndex, tail: "")
-        guard scalars.next() == " " else { return false }
-        var scalar = scalars.next()
-        while let current = scalar, rules.closers.has(current) { scalar = scalars.next() }
-        guard let last = scalar else { return false }
-        return last.properties.isAlphabetic || last.properties.numericType != nil
+        let scalars = text.unicodeScalars
+        guard scalars.endIndex > scalars.startIndex else { return false }
+        // A space never joins the character before it, so when the last scalar is a space, it is the last character
+        // on its own, and its index is a character boundary.
+        var end = scalars.index(before: scalars.endIndex)
+        guard scalars[end] == " " else { return false }
+        while end > text.startIndex {
+            let previous = text.index(before: end)
+            let first = scalars[previous]
+            if rules.closers.has(first) {
+                end = previous
+                continue
+            }
+            return first.properties.isAlphabetic || first.properties.numericType != nil
+        }
+        return false
     }
 
     // MARK: Delete repeat
@@ -380,6 +425,11 @@ public struct TypingEngine: Sendable {
     /// Moves `end` back over the whitespace before it and the run of non-whitespace before that, a character
     /// (grapheme cluster) at a time, and returns how many characters it moved over. A character counts as
     /// whitespace by its first scalar.
+    ///
+    /// Cost, for a device test (rung 4): linear in the word's length, except that Swift's backward grapheme
+    /// breaking over a run of regional indicators (flag emoji) is quadratic. The KEY-22 round 1 review measured a
+    /// word delete over 100, 1,000 and 4,000 flags at 0.14, 12 and 218 ms in a Linux debug build. iOS shares only
+    /// part of the text before the cursor, which bounds it in practice; the device test should confirm that.
     private static func stepBackOverWord(_ text: String, end: inout String.Index) -> Int {
         var count = 0
         while end > text.startIndex {

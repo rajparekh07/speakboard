@@ -47,6 +47,7 @@ struct TypingAllocationTests {
         var emptyTicks = 0
         var deletesAtStart = 0
         var contextChanges = 0
+        var userOffKeptThroughContextChange = 0
         var autocapitalization: Set<String> = []
         var returnKinds: Set<String> = []
         var settings: Set<String> = []
@@ -87,6 +88,7 @@ struct TypingAllocationTests {
         func send(_ event: KeyEvent, at newTime: Double) {
             time = newTime
             let before = engine.shiftState
+            let userOffBefore = engine.userTurnedShiftOff
             let eventContext = context()
             let output = engine.handle(event, at: time, in: eventContext)
             field.apply(output)
@@ -111,6 +113,11 @@ struct TypingAllocationTests {
                 if eventContext.textBeforeCursor.isEmpty { coverage.deletesAtStart += 1 }
             case .contextChanged:
                 if before != engine.shiftState { coverage.contextChanges += 1 }
+                if userOffBefore && engine.userTurnedShiftOff
+                    && TypingEngine.wouldCapitalize(eventContext, settings: engine.settings)
+                {
+                    coverage.userOffKeptThroughContextChange += 1
+                }
             case .shift, .deleteUp: break
             }
             switch engine.shiftState {
@@ -190,6 +197,7 @@ struct TypingAllocationTests {
         #expect(coverage.returns > 0 && coverage.disabledReturns > 0)
         #expect(coverage.characterRepeats > 0 && coverage.wordRepeats > 0 && coverage.emptyTicks > 0)
         #expect(coverage.deletesAtStart > 0 && coverage.contextChanges > 0)
+        #expect(coverage.userOffKeptThroughContextChange > 0, "a Shift tapped off, kept where autocap says on")
         #expect(coverage.autocapitalization.count == Autocapitalization.allCases.count)
         #expect(coverage.returnKinds.count == ReturnKeyType.allCases.count)
         #expect(coverage.settings.count == 8, "every combination of the three settings")
