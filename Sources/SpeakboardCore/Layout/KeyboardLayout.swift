@@ -73,7 +73,8 @@ public struct KeyboardLayout: Sendable {
 
     /// The layout for `locale` on `deviceClass` in `orientation`, or nil if neither the locale nor its language
     /// has layout data. The data for the locale itself is used if there is any, otherwise its language's: "en-US",
-    /// "en_GB" and "EN" all get the "en" layout (`LayoutLocale.language`). "fr" gets nil today.
+    /// "en_GB", "en@calendar=gregorian" and "EN" all get the "en" layout (`LayoutLocale.language`). "fr" gets nil
+    /// today.
     public init?(locale: LayoutLocale, deviceClass: DeviceClass, orientation: Orientation) {
         guard let (dataLocale, letters) = LetterLayouts.rows(for: locale) else { return nil }
         let metrics = Metrics.of(deviceClass, orientation)

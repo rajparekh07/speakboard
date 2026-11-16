@@ -1,7 +1,7 @@
 // The letters layouts, as data: one per locale (ADR-0010). English is the only
 // locale with data. A locale with no data of its own uses its language's: the
-// part of its identifier before the first "-" or "_", lowercased, so "en-US",
-// "en_GB" and "EN" all get "en". A later language adds an entry here; it does not change the
+// part of its identifier before the first "-", "_" or "@", lowercased, so
+// "en-US", "en_GB", "en@calendar=gregorian" and "EN" all get "en". A later language adds an entry here; it does not change the
 // layout code, as long as its rows fit the token geometry (row 1 holds 10
 // letters edge to edge, row 2 is centred, row 3 is centred between shift and
 // delete).
@@ -19,10 +19,10 @@ public struct LayoutLocale: Hashable, Sendable {
     /// English.
     public static let english = LayoutLocale(identifier: "en")
 
-    /// The locale's language: its identifier up to the first "-" or "_", lowercased. "en-US" gives "en".
+    /// The locale's language: its identifier up to the first "-", "_" or "@", lowercased. "en-US" and
+    /// "en@calendar=gregorian" give "en".
     public var language: LayoutLocale {
-        let subtag = identifier.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)[0]
-            .split(separator: "_", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        let subtag = identifier.prefix { $0 != "-" && $0 != "_" && $0 != "@" }
         return LayoutLocale(identifier: subtag.lowercased())
     }
 }

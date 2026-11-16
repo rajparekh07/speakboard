@@ -21,9 +21,13 @@
 // whose target differs, or device classes out of the axis order.
 //
 // These are not all the checks the format note asks of a generator that does
-// not run the validator: it skips the derived-geometry recomputation (extra
-// check 6), the Swift-name checks beyond collisions (check 2), and checks 8
-// and 9. The validator, validate-tokens.py, runs when an export is pinned
+// not run the validator. Of its extra checks it makes check 1 (through
+// scripts/metrics.sh), the finite-number half of check 3, the part of check 4
+// on alias axes, units and values, and check 5. It skips: check 2 beyond name
+// collisions (prefix ids, reserved and keyword names), the integer-literal
+// half of check 3 (a metrics column holds no `count`), check 6 (derived
+// geometry), check 7 (method `derived` with another source), check 8 (no
+// measured values with --no-measured) and check 9 (the summary recount). The validator, validate-tokens.py, runs when an export is pinned
 // (CONTRIBUTING.md, "Design tokens", step 2), not in `make check`, because the
 // Swift image has no Python. The hash pin keeps the export to the one that was
 // validated.

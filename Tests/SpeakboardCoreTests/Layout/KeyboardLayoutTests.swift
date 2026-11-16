@@ -223,7 +223,9 @@ struct LayoutLocaleTests {
 
     @Test(
         "A locale with a region or another spelling gets its language's layout",
-        arguments: ["en-US", "en-GB", "en_GB", "EN", "en-Latn-US"])
+        arguments: [
+            "en-US", "en-GB", "en_GB", "EN", "en-Latn-US", "en@calendar=gregorian", "en_US@rg=gbzzzz",
+        ])
     func languageFallback(_ identifier: String) throws {
         let layout = try #require(
             KeyboardLayout(
@@ -232,7 +234,9 @@ struct LayoutLocaleTests {
         #expect(layout.keys == (try englishLayout(.iphone393x852, .portrait)).keys)
     }
 
-    @Test("A locale whose language has no layout data gives no layout", arguments: ["fr", "de-DE", "e", "", "-en"])
+    @Test(
+        "A locale whose language has no layout data gives no layout",
+        arguments: ["fr", "de-DE", "e", "", "-en", "@en", "fr@calendar=gregorian"])
     func otherLocale(_ identifier: String) {
         let layout = KeyboardLayout(
             locale: LayoutLocale(identifier: identifier), deviceClass: .iphone393x852, orientation: .portrait)
