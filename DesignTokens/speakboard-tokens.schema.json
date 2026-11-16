@@ -1,0 +1,6008 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "speakboard-tokens.schema.json",
+  "title": "Speakboard token export",
+  "description": "Schema 1.3.0, generated together with token set 0.2.2: the device class ids, source ids and token ids it lists are that token set's. Rules JSON Schema cannot express are checked by validate-tokens.py and listed in the brand book's 'Token export format' section.",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "tokenSetVersion",
+    "platform",
+    "units",
+    "toleranceUnits",
+    "axes",
+    "sources",
+    "ios"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$",
+      "not": {
+        "pattern": "\\s"
+      }
+    },
+    "tokenSetVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "not": {
+        "pattern": "\\s"
+      }
+    },
+    "status": {
+      "type": "string"
+    },
+    "ticket": {
+      "type": "string"
+    },
+    "designSystem": {
+      "type": "string"
+    },
+    "platform": {
+      "const": "iphone"
+    },
+    "units": {
+      "type": "object",
+      "required": [
+        "pt",
+        "ms",
+        "ratio",
+        "count",
+        "srgb-hex8",
+        "uifont-weight",
+        "font-family",
+        "glyph-id"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "toleranceUnits": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "axes": {
+      "type": "object",
+      "required": [
+        "deviceClass",
+        "orientation",
+        "appearance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "deviceClass": {
+          "const": [
+            "iphone-375x667",
+            "iphone-375x812",
+            "iphone-390x844",
+            "iphone-393x852",
+            "iphone-402x874",
+            "iphone-414x896",
+            "iphone-420x912",
+            "iphone-428x926",
+            "iphone-430x932",
+            "iphone-440x956"
+          ]
+        },
+        "orientation": {
+          "const": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "appearance": {
+          "const": [
+            "light",
+            "dark"
+          ]
+        }
+      }
+    },
+    "sources": {
+      "type": "object",
+      "required": [
+        "apple-device-specs",
+        "apple-hig-color",
+        "derived",
+        "ios26-impression",
+        "no-basis",
+        "pre26-keyboard-frame-reports",
+        "pre26-keyboard-recall"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "apple-hig-color": {
+          "type": "object",
+          "required": [
+            "title",
+            "kind",
+            "url",
+            "note"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "public-documentation",
+                "recall-unverified",
+                "derivation",
+                "none",
+                "capture"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "apple-device-specs": {
+          "type": "object",
+          "required": [
+            "title",
+            "kind",
+            "url",
+            "note"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "public-documentation",
+                "recall-unverified",
+                "derivation",
+                "none",
+                "capture"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "pre26-keyboard-recall": {
+          "type": "object",
+          "required": [
+            "title",
+            "kind",
+            "url",
+            "note"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "public-documentation",
+                "recall-unverified",
+                "derivation",
+                "none",
+                "capture"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "pre26-keyboard-frame-reports": {
+          "type": "object",
+          "required": [
+            "title",
+            "kind",
+            "url",
+            "note"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "public-documentation",
+                "recall-unverified",
+                "derivation",
+                "none",
+                "capture"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "ios26-impression": {
+          "type": "object",
+          "required": [
+            "title",
+            "kind",
+            "url",
+            "note"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "public-documentation",
+                "recall-unverified",
+                "derivation",
+                "none",
+                "capture"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "derived": {
+          "type": "object",
+          "required": [
+            "title",
+            "kind",
+            "url",
+            "note"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "public-documentation",
+                "recall-unverified",
+                "derivation",
+                "none",
+                "capture"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        "no-basis": {
+          "type": "object",
+          "required": [
+            "title",
+            "kind",
+            "url",
+            "note"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "public-documentation",
+                "recall-unverified",
+                "derivation",
+                "none",
+                "capture"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "ios": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[0-9]{2}$",
+        "not": {
+          "pattern": "\\s"
+        }
+      },
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/iosVersion"
+      }
+    },
+    "summary": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "deviceClassId": {
+      "enum": [
+        "iphone-375x667",
+        "iphone-375x812",
+        "iphone-390x844",
+        "iphone-393x852",
+        "iphone-402x874",
+        "iphone-414x896",
+        "iphone-420x912",
+        "iphone-428x926",
+        "iphone-430x932",
+        "iphone-440x956"
+      ]
+    },
+    "tokenId": {
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9]*(\\.[a-z][a-zA-Z0-9]*)+$",
+      "not": {
+        "pattern": "\\s"
+      }
+    },
+    "tolerance": {
+      "type": "object",
+      "required": [
+        "plusMinus",
+        "unit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "plusMinus": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "enum": [
+            "count",
+            "deltaE2000",
+            "enum",
+            "ms",
+            "pt",
+            "ratio",
+            "weightSteps"
+          ]
+        }
+      }
+    },
+    "provMeasured": {
+      "type": "object",
+      "required": [
+        "kind",
+        "ios",
+        "device",
+        "capture"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "measured"
+        },
+        "ios": {
+          "type": "string",
+          "pattern": "^[0-9]{2}(\\.[0-9]+){0,2}$",
+          "not": {
+            "pattern": "\\s"
+          },
+          "description": "Exact iOS version of the capture, e.g. 26.1."
+        },
+        "device": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model and device class, e.g. iPhone 16 (iphone-393x852), or the simulator runtime."
+        },
+        "capture": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reference to the capture: CI run, file path and content hash."
+        },
+        "capturedAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tolerance": {
+          "$ref": "#/$defs/tolerance"
+        }
+      }
+    },
+    "provEstimated": {
+      "type": "object",
+      "required": [
+        "kind",
+        "source",
+        "tolerance",
+        "confidence",
+        "method"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "estimated"
+        },
+        "source": {
+          "enum": [
+            "apple-device-specs",
+            "apple-hig-color",
+            "derived",
+            "ios26-impression",
+            "no-basis",
+            "pre26-keyboard-frame-reports",
+            "pre26-keyboard-recall"
+          ]
+        },
+        "tolerance": {
+          "$ref": "#/$defs/tolerance"
+        },
+        "confidence": {
+          "enum": [
+            "medium",
+            "low",
+            "none"
+          ]
+        },
+        "method": {
+          "enum": [
+            "recalled",
+            "derived",
+            "assumed",
+            "guessed",
+            "placeholder"
+          ]
+        },
+        "derivation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "derived"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "derivation"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "no-basis"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "method": {
+                "const": "placeholder"
+              },
+              "confidence": {
+                "const": "none"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "provInvented": {
+      "type": "object",
+      "required": [
+        "kind",
+        "rationale"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "invented"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decidedIn": {
+          "type": "string",
+          "minLength": 1
+        },
+        "aliasOf": {
+          "enum": [
+            "dictation.armed.glyph",
+            "dictation.armed.glyphColor",
+            "dictation.armed.indicatorColor",
+            "dictation.armed.keyFill",
+            "dictation.failed.glyph",
+            "dictation.failed.glyphColor",
+            "dictation.failed.keyFill",
+            "dictation.levelRing.smoothing",
+            "dictation.listening.glyph",
+            "dictation.listening.glyphColor",
+            "dictation.listening.keyFill",
+            "dictation.processing.glyph",
+            "dictation.processing.glyphColor",
+            "dictation.processing.keyFill",
+            "dictation.processing.pulsePeriod",
+            "dictation.recovered.glyph",
+            "dictation.recovered.glyphColor",
+            "dictation.recovered.indicatorColor",
+            "dictation.recovered.keyFill",
+            "dictation.recovered.visibleFor",
+            "dictation.rest.glyph",
+            "dictation.rest.glyphColor",
+            "dictation.rest.keyFill",
+            "dictation.toListening.duration",
+            "dictation.transcript.labelSize",
+            "dictation.transcript.partialColor",
+            "dictation.transition.duration",
+            "key.cornerRadius",
+            "key.delete.repeatInitialDelay",
+            "key.delete.repeatInterval",
+            "key.delete.width",
+            "key.delete.wordModeAfter",
+            "key.function.fill",
+            "key.function.fillPressed",
+            "key.function.glyphSize",
+            "key.function.labelSize",
+            "key.function.labelWeight",
+            "key.gap.horizontal",
+            "key.gap.vertical",
+            "key.label",
+            "key.letter.fill",
+            "key.letter.height",
+            "key.letter.labelSize",
+            "key.letter.labelWeight",
+            "key.letter.width",
+            "key.modeSwitch.width",
+            "key.return.fillProminent",
+            "key.return.labelProminent",
+            "key.return.width",
+            "key.shadow.color",
+            "key.shadow.offsetY",
+            "key.shift.capsLockDoubleTapWindow",
+            "key.shift.width",
+            "key.space.doubleTapPeriodWindow",
+            "key.space.trackpadActivationDelay",
+            "key.space.width",
+            "key.utility.width",
+            "keyboard.backdrop.fallback",
+            "keyboard.backdrop.topCornerRadius",
+            "keyboard.inset.bottom",
+            "keyboard.inset.side",
+            "keyboard.inset.top",
+            "keyboard.keyArea.height",
+            "keyboard.keyArea.width",
+            "keyboard.totalHeight",
+            "mic.glyphSize",
+            "mic.indicator.diameter",
+            "mic.indicator.inset",
+            "mic.levelRing.maxScale",
+            "mic.levelRing.width",
+            "popup.accent.cellHeight",
+            "popup.accent.cellWidthRatio",
+            "popup.accent.longPressDelay",
+            "popup.accent.selectionCornerRadius",
+            "popup.fill",
+            "popup.key.cornerRadius",
+            "popup.key.glyphSize",
+            "popup.key.hideDelay",
+            "popup.key.riseAboveKey",
+            "popup.key.riseLimit",
+            "popup.key.showDelay",
+            "popup.key.sideOverhang",
+            "suggestionBar.candidate.count",
+            "suggestionBar.candidate.highlight",
+            "suggestionBar.candidate.label",
+            "suggestionBar.candidate.labelSize",
+            "suggestionBar.divider",
+            "suggestionBar.height",
+            "systemStrip.height",
+            "typeface.family"
+          ]
+        }
+      }
+    },
+    "provenance": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/provMeasured"
+        },
+        {
+          "$ref": "#/$defs/provEstimated"
+        },
+        {
+          "$ref": "#/$defs/provInvented"
+        }
+      ]
+    },
+    "leaf.pt.apple": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "const": "pt"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "measured",
+                    "estimated"
+                  ]
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "pt"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.pt.ours": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "const": "pt"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "invented"
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "pt"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.ms.apple": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "const": "ms"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "measured",
+                    "estimated"
+                  ]
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "ms"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.ms.ours": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "const": "ms"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "invented"
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "ms"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.ratio.apple": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "const": "ratio"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "measured",
+                    "estimated"
+                  ]
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "ratio"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.ratio.ours": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "const": "ratio"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "invented"
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "ratio"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.count.apple": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "integer"
+        },
+        "unit": {
+          "const": "count"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "measured",
+                    "estimated"
+                  ]
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "count"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.count.ours": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "integer"
+        },
+        "unit": {
+          "const": "count"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "invented"
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "count"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.srgb-hex8.apple": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{8}$",
+          "not": {
+            "pattern": "\\s"
+          }
+        },
+        "unit": {
+          "const": "srgb-hex8"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "measured",
+                    "estimated"
+                  ]
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "deltaE2000"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.srgb-hex8.ours": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string",
+          "pattern": "^#[0-9A-F]{8}$",
+          "not": {
+            "pattern": "\\s"
+          }
+        },
+        "unit": {
+          "const": "srgb-hex8"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "invented"
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "deltaE2000"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.uifont-weight.apple": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "enum": [
+            "ultraLight",
+            "thin",
+            "light",
+            "regular",
+            "medium",
+            "semibold",
+            "bold",
+            "heavy",
+            "black"
+          ]
+        },
+        "unit": {
+          "const": "uifont-weight"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "measured",
+                    "estimated"
+                  ]
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "weightSteps"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.uifont-weight.ours": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "enum": [
+            "ultraLight",
+            "thin",
+            "light",
+            "regular",
+            "medium",
+            "semibold",
+            "bold",
+            "heavy",
+            "black"
+          ]
+        },
+        "unit": {
+          "const": "uifont-weight"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "invented"
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "weightSteps"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.font-family.apple": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "const": "system"
+        },
+        "unit": {
+          "const": "font-family"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "measured",
+                    "estimated"
+                  ]
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "enum"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.font-family.ours": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "const": "system"
+        },
+        "unit": {
+          "const": "font-family"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "invented"
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "enum"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.glyph-id.apple": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9]+)*$",
+          "not": {
+            "pattern": "\\s"
+          }
+        },
+        "unit": {
+          "const": "glyph-id"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "measured",
+                    "estimated"
+                  ]
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "enum"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "leaf.glyph-id.ours": {
+      "type": "object",
+      "required": [
+        "value",
+        "unit",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[a-z0-9]+)*$",
+          "not": {
+            "pattern": "\\s"
+          }
+        },
+        "unit": {
+          "const": "glyph-id"
+        },
+        "provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "invented"
+                },
+                "tolerance": {
+                  "properties": {
+                    "unit": {
+                      "const": "enum"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "token": {
+      "type": "object",
+      "required": [
+        "group",
+        "description",
+        "appleMatching",
+        "unit",
+        "axes",
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "appleMatching": {
+          "type": "boolean"
+        },
+        "unit": {
+          "enum": [
+            "pt",
+            "ms",
+            "ratio",
+            "count",
+            "srgb-hex8",
+            "uifont-weight",
+            "font-family",
+            "glyph-id"
+          ]
+        },
+        "axes": {
+          "enum": [
+            [],
+            [
+              "appearance"
+            ],
+            [
+              "deviceClass",
+              "orientation"
+            ]
+          ]
+        },
+        "values": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "pt"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.pt.apple"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "pt"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.pt.ours"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "ms"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.ms.apple"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "ms"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.ms.ours"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "ratio"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.ratio.apple"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "ratio"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.ratio.ours"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "count"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.count.apple"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "count"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.count.ours"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "srgb-hex8"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.srgb-hex8.apple"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "srgb-hex8"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.srgb-hex8.ours"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "uifont-weight"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.uifont-weight.apple"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "uifont-weight"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.uifont-weight.ours"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "font-family"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.font-family.apple"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "font-family"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.font-family.ours"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "glyph-id"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.glyph-id.apple"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": []
+              },
+              "unit": {
+                "const": "glyph-id"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "$ref": "#/$defs/leaf.glyph-id.ours"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "pt"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.pt.apple"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.pt.apple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "pt"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.pt.ours"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.pt.ours"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "ms"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.ms.apple"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.ms.apple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "ms"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.ms.ours"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.ms.ours"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "ratio"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.ratio.apple"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.ratio.apple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "ratio"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.ratio.ours"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.ratio.ours"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "count"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.count.apple"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.count.apple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "count"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.count.ours"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.count.ours"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "srgb-hex8"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "srgb-hex8"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "uifont-weight"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.uifont-weight.apple"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.uifont-weight.apple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "uifont-weight"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.uifont-weight.ours"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.uifont-weight.ours"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "font-family"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.font-family.apple"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.font-family.apple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "font-family"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.font-family.ours"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.font-family.ours"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "glyph-id"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.glyph-id.apple"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.glyph-id.apple"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "appearance"
+                ]
+              },
+              "unit": {
+                "const": "glyph-id"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "light",
+                  "dark"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "light": {
+                    "$ref": "#/$defs/leaf.glyph-id.ours"
+                  },
+                  "dark": {
+                    "$ref": "#/$defs/leaf.glyph-id.ours"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "pt"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.apple"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "pt"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.pt.ours"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "ms"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.apple"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "ms"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ms.ours"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "ratio"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.apple"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "ratio"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.ratio.ours"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "count"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.apple"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "count"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.count.ours"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "srgb-hex8"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.apple"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "srgb-hex8"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.srgb-hex8.ours"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "uifont-weight"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.apple"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "uifont-weight"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.uifont-weight.ours"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "font-family"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.apple"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "font-family"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.font-family.ours"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "glyph-id"
+              },
+              "appleMatching": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.apple"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "axes",
+              "unit",
+              "appleMatching"
+            ],
+            "properties": {
+              "axes": {
+                "const": [
+                  "deviceClass",
+                  "orientation"
+                ]
+              },
+              "unit": {
+                "const": "glyph-id"
+              },
+              "appleMatching": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "iphone-375x667",
+                  "iphone-375x812",
+                  "iphone-390x844",
+                  "iphone-393x852",
+                  "iphone-402x874",
+                  "iphone-414x896",
+                  "iphone-420x912",
+                  "iphone-428x926",
+                  "iphone-430x932",
+                  "iphone-440x956"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "iphone-375x667": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-375x812": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-390x844": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-393x852": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-402x874": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-414x896": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-420x912": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-428x926": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-430x932": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  },
+                  "iphone-440x956": {
+                    "type": "object",
+                    "required": [
+                      "portrait",
+                      "landscape"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "portrait": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      },
+                      "landscape": {
+                        "$ref": "#/$defs/leaf.glyph-id.ours"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "deviceClass": {
+      "type": "object",
+      "required": [
+        "screen",
+        "homeIndicator",
+        "models",
+        "provenance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "screen": {
+          "type": "object",
+          "required": [
+            "width",
+            "height",
+            "unit",
+            "orientation"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            },
+            "unit": {
+              "const": "pt"
+            },
+            "orientation": {
+              "const": "portrait"
+            }
+          }
+        },
+        "homeIndicator": {
+          "type": "boolean"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "provenance": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/provMeasured"
+            },
+            {
+              "$ref": "#/$defs/provEstimated"
+            }
+          ]
+        }
+      }
+    },
+    "iosVersion": {
+      "type": "object",
+      "required": [
+        "target",
+        "referenceDeviceClass",
+        "deviceClasses",
+        "tokens"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "type": "string"
+        },
+        "referenceDeviceClass": {
+          "$ref": "#/$defs/deviceClassId"
+        },
+        "deviceClasses": {
+          "type": "object",
+          "required": [
+            "iphone-375x667",
+            "iphone-375x812",
+            "iphone-390x844",
+            "iphone-393x852",
+            "iphone-402x874",
+            "iphone-414x896",
+            "iphone-420x912",
+            "iphone-428x926",
+            "iphone-430x932",
+            "iphone-440x956"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "iphone-375x667": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-375x812": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-390x844": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-393x852": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-402x874": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-414x896": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-420x912": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-428x926": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-430x932": {
+              "$ref": "#/$defs/deviceClass"
+            },
+            "iphone-440x956": {
+              "$ref": "#/$defs/deviceClass"
+            }
+          }
+        },
+        "tokens": {
+          "type": "object",
+          "required": [
+            "dictation.armed.glyph",
+            "dictation.armed.glyphColor",
+            "dictation.armed.indicatorColor",
+            "dictation.armed.keyFill",
+            "dictation.failed.glyph",
+            "dictation.failed.glyphColor",
+            "dictation.failed.keyFill",
+            "dictation.levelRing.smoothing",
+            "dictation.listening.glyph",
+            "dictation.listening.glyphColor",
+            "dictation.listening.keyFill",
+            "dictation.processing.glyph",
+            "dictation.processing.glyphColor",
+            "dictation.processing.keyFill",
+            "dictation.processing.pulsePeriod",
+            "dictation.recovered.glyph",
+            "dictation.recovered.glyphColor",
+            "dictation.recovered.indicatorColor",
+            "dictation.recovered.keyFill",
+            "dictation.recovered.visibleFor",
+            "dictation.rest.glyph",
+            "dictation.rest.glyphColor",
+            "dictation.rest.keyFill",
+            "dictation.toListening.duration",
+            "dictation.transcript.labelSize",
+            "dictation.transcript.partialColor",
+            "dictation.transition.duration",
+            "key.cornerRadius",
+            "key.delete.repeatInitialDelay",
+            "key.delete.repeatInterval",
+            "key.delete.width",
+            "key.delete.wordModeAfter",
+            "key.function.fill",
+            "key.function.fillPressed",
+            "key.function.glyphSize",
+            "key.function.labelSize",
+            "key.function.labelWeight",
+            "key.gap.horizontal",
+            "key.gap.vertical",
+            "key.label",
+            "key.letter.fill",
+            "key.letter.height",
+            "key.letter.labelSize",
+            "key.letter.labelWeight",
+            "key.letter.width",
+            "key.modeSwitch.width",
+            "key.return.fillProminent",
+            "key.return.labelProminent",
+            "key.return.width",
+            "key.shadow.color",
+            "key.shadow.offsetY",
+            "key.shift.capsLockDoubleTapWindow",
+            "key.shift.width",
+            "key.space.doubleTapPeriodWindow",
+            "key.space.trackpadActivationDelay",
+            "key.space.width",
+            "key.utility.width",
+            "keyboard.backdrop.fallback",
+            "keyboard.backdrop.topCornerRadius",
+            "keyboard.inset.bottom",
+            "keyboard.inset.side",
+            "keyboard.inset.top",
+            "keyboard.keyArea.height",
+            "keyboard.keyArea.width",
+            "keyboard.totalHeight",
+            "mic.glyphSize",
+            "mic.indicator.diameter",
+            "mic.indicator.inset",
+            "mic.levelRing.maxScale",
+            "mic.levelRing.width",
+            "popup.accent.cellHeight",
+            "popup.accent.cellWidthRatio",
+            "popup.accent.longPressDelay",
+            "popup.accent.selectionCornerRadius",
+            "popup.fill",
+            "popup.key.cornerRadius",
+            "popup.key.glyphSize",
+            "popup.key.hideDelay",
+            "popup.key.riseAboveKey",
+            "popup.key.riseLimit",
+            "popup.key.showDelay",
+            "popup.key.sideOverhang",
+            "suggestionBar.candidate.count",
+            "suggestionBar.candidate.highlight",
+            "suggestionBar.candidate.label",
+            "suggestionBar.candidate.labelSize",
+            "suggestionBar.divider",
+            "suggestionBar.height",
+            "systemStrip.height",
+            "typeface.family"
+          ],
+          "propertyNames": {
+            "$ref": "#/$defs/tokenId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/token"
+          }
+        }
+      }
+    }
+  }
+}

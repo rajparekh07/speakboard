@@ -12,11 +12,11 @@ SWIFT_RUN := docker run --rm -v "$(CURDIR)":/work -w /work \
 
 FORMAT_PATHS := Package.swift Sources Tests scripts
 
-.PHONY: check docker-ready guard guard-deps build test format-check format clean
+.PHONY: check docker-ready guard guard-deps metrics-check metrics build test format-check format clean
 
-# check: everything a ticket must pass. The two core guards, build, tests,
-# format check.
-check: guard docker-ready guard-deps build test format-check
+# check: everything a ticket must pass. The two core guards, the token pin and
+# the generated metrics tables, build, tests, format check.
+check: guard docker-ready guard-deps metrics-check build test format-check
 	@echo "make check: OK"
 
 # docker-ready: start dockerd if needed and make sure the Swift image is present.
@@ -36,6 +36,15 @@ guard:
 # Its self-test runs first, for the same reason.
 guard-deps: docker-ready
 	@$(SWIFT_RUN) bash -c 'scripts/core-deps-selftest.sh && scripts/core-deps-guard.sh'
+
+# metrics-check: the pinned token export matches DesignTokens/tokens.pin, and the
+# committed metrics tables are exactly what the generator makes from it.
+metrics-check: docker-ready
+	@$(SWIFT_RUN) scripts/metrics.sh check
+
+# metrics: regenerate the metrics tables from the pinned token export.
+metrics: docker-ready
+	@$(SWIFT_RUN) scripts/metrics.sh write
 
 build: docker-ready
 	$(SWIFT_RUN) swift build

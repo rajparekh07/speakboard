@@ -1,0 +1,21 @@
+# The pinned design token export: the single source of key geometry (KEY-21).
+#
+# speakboard-tokens.json in this folder is a copy of the export published in
+# Claude Design. scripts/metrics.sh refuses it unless its SHA-256 equals
+# `sha256` below, and generates Sources/SpeakboardCore/Layout/GeneratedMetrics.swift
+# from it. `make check` fails if either does not hold.
+#
+# The design system URL, publish label and token set version are for people:
+# the artifact's version id is not reliable (export-format.md, "Pinning").
+#
+# The schema, validator and format note are the ones published beside that
+# export, kept so the export can be validated when it is repinned. To repin,
+# see CONTRIBUTING.md, "Design tokens".
+
+design-system: https://claude.ai/artifact/X7uXynbGsf54dHirJhbb9x
+publish-label: KEY-4 tokens v0.2.2
+token-set-version: 0.2.2
+sha256: a61b74b95f889492393a621e2130a2caff4c0079782d0a8048a3cad052af50b4
+schema-sha256: ae0da7ab619e2852616d7bc220ad0a00740e4957524187686e8da4e57615a623
+validator-sha256: 0a566d2832c5a1e4200be248f0f20cf051d91c010b5a9cfabd8581e12f680f67
+format-note-sha256: 3c5fcf54531bdc93118e85ec79130b419818a268a6f731d21c91da1c4d747f9b

@@ -9,6 +9,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "SpeakboardCore"),
-        .testTarget(name: "SpeakboardCoreTests", dependencies: ["SpeakboardCore"]),
+        // Test support: counts heap allocations, for the tests that prove a path allocates nothing.
+        // Linked into the tests only, never into the core or its product.
+        .target(name: "AllocationCounter", path: "Tests/AllocationCounter"),
+        .testTarget(name: "SpeakboardCoreTests", dependencies: ["SpeakboardCore", "AllocationCounter"]),
     ]
 )

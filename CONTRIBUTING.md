@@ -15,9 +15,10 @@ make check
 1. **Core guard.** It first runs its own self-test, then checks that `Sources/SpeakboardCore` never mentions `FoundationNetworking` or any `URLSession` name. It follows symbolic links, because SwiftPM compiles a linked file into the core.
 2. **Docker ready.** It first runs the self-test of its stale containerd pid check, which needs no daemon. It starts `dockerd` if it is not running, and pulls the Swift image if it is missing.
 3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` is a regular target, declares no dependencies and sets no `path`, `sources`, plugins or unsafe flags, and that the `SpeakboardCore` product holds only that target. Those are ways to compile code into the core, or ship code beside it, from outside the folder the core guard reads. It does not close every way: it does not check the target's other settings. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
-4. **Build.** `swift build`
-5. **Tests.** `swift test`
-6. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests` and `scripts`.
+4. **Design tokens.** It checks that the pinned token export in `DesignTokens/` has the SHA-256 that `DesignTokens/tokens.pin` records, then runs the generator and fails if `Sources/SpeakboardCore/Layout/GeneratedMetrics.swift` differs from what it makes. See "Design tokens" below.
+5. **Build.** `swift build`
+6. **Tests.** `swift test`
+7. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests` and `scripts`.
 
 It ends with `make check: OK`.
 
@@ -39,6 +40,8 @@ The image is pinned by tag, not by digest. A tag can be re-pushed to point at a 
 | -- | -- |
 | `make guard` | The core guard and its self-test only. Needs no Docker |
 | `make guard-deps` | The core dependency guard and its self-test only |
+| `make metrics-check` | The design token step only |
+| `make metrics` | Regenerates the metrics tables from the pinned token export |
 | `make build` | `swift build` in Docker |
 | `make test` | `swift test` in Docker |
 | `make format-check` | The format check only |
@@ -107,7 +110,9 @@ Sources/SpeakboardCore/    the core: pure Swift, Foundation only, builds on Linu
   Session/                 the dictation session state machine and message schema
   Budgets/                 the manifesto's budgets as data, read by tests
 Tests/SpeakboardCoreTests/ tests for the core
-scripts/                   the scripts behind make check
+Tests/AllocationCounter/   test support: counts heap allocations (C, Linux), for tests only
+DesignTokens/              the pinned design token export the metrics tables come from
+scripts/                   the scripts behind make check, and the metrics generator
 Makefile                   make check
 .github/workflows/         CI: linux.yml runs make check on every push
 ```
@@ -127,6 +132,19 @@ Evals/                     typing and dictation evaluation sets
 Put logic in the core whenever you can. It is the fastest place to build and test.
 
 Each file name must be unique within the core, even across folders. Swift requires it.
+
+## Design tokens
+
+Key geometry comes from one source: the design system's token export in Claude Design. A copy is pinned in `DesignTokens/`, beside the schema, validator and format note published with it. `DesignTokens/tokens.pin` records the design system's URL, the publish label, the token set version and each file's SHA-256.
+
+`scripts/generate-metrics.swift` makes the core's metrics tables, `Sources/SpeakboardCore/Layout/GeneratedMetrics.swift`, from the pinned export: one row per device class and orientation, one column per token that varies by both, each cell with its value, tolerance, kind and placeholder flag. It copies every value as the export gives it. Never edit the tables or the pinned export by hand: `make check` fails on both.
+
+To move to a new export:
+
+1. Fetch the new `speakboard-tokens.json`, its schema, `validate-tokens.py` and `export-format.md` from the design system, at a named publish label.
+2. Validate it with the schema published beside it: `python3 -I DesignTokens/validate-tokens.py DesignTokens/speakboard-tokens.json --schema DesignTokens/speakboard-tokens.schema.json --expect-sha256 <hash>` (add `--no-measured` while no value is measured). It needs Python 3, which the Swift image does not have, so run it on the host.
+3. Update every line of `DesignTokens/tokens.pin`.
+4. Run `make metrics`, then `make check`, and commit the export, the pin and the tables together.
 
 ## Formatting
 
