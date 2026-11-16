@@ -32,6 +32,8 @@ expect pass "a longer name is not a match" 'let mySessionURLSessionless = 1'
 expect fail "plain import" 'import FoundationNetworking'
 expect fail "preconcurrency import" '@preconcurrency import FoundationNetworking'
 expect fail "scoped import" 'import struct FoundationNetworking.URLRequest'
+expect fail "access-level import" 'internal import FoundationNetworking'
+expect fail "public import" 'public import FoundationNetworking'
 expect fail "conditional import" '#if canImport(FoundationNetworking)
 #endif'
 expect fail "URLSession use" 'let session = URLSession.shared'

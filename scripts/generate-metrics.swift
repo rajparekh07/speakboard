@@ -18,10 +18,15 @@
 // fixing, nothing invented. It fails, writing nothing, on anything it does not
 // know: a schema major version other than 1, an axis shape, unit, tolerance
 // unit or provenance kind it does not know, a non-finite number, an alias
-// whose target differs, or device classes out of the axis order. The export
-// is pinned by hash and was validated with validate-tokens.py when it was
-// pinned; these checks are the ones the format note asks of a generator that
-// does not run the validator, as far as this output depends on them.
+// whose target differs, or device classes out of the axis order.
+//
+// These are not all the checks the format note asks of a generator that does
+// not run the validator: it skips the derived-geometry recomputation (extra
+// check 6), the Swift-name checks beyond collisions (check 2), and checks 8
+// and 9. The validator, validate-tokens.py, runs when an export is pinned
+// (CONTRIBUTING.md, "Design tokens", step 2), not in `make check`, because the
+// Swift image has no Python. The hash pin keeps the export to the one that was
+// validated.
 
 import Foundation
 

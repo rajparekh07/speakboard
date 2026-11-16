@@ -34,12 +34,26 @@ struct MetricsTableTests {
         return cells
     }
 
+    /// The "key: value" lines of DesignTokens/tokens.pin.
+    static func pin() throws -> [String: String] {
+        let url = repoRoot.appendingPathComponent("DesignTokens/tokens.pin")
+        var pin: [String: String] = [:]
+        for line in try String(contentsOf: url, encoding: .utf8).split(separator: "\n") where !line.hasPrefix("#") {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            pin[line[..<colon].trimmingCharacters(in: .whitespaces)] =
+                line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        }
+        return pin
+    }
+
     @Test("The version the tables name is the pinned export's")
     func version() throws {
         let export = try Self.export()
+        let pin = try Self.pin()
         #expect(TokenExport.tokenSetVersion == export["tokenSetVersion"] as? String)
-        #expect(TokenExport.publishLabel == "KEY-4 tokens v0.2.2")
-        #expect(TokenExport.sha256 == "a61b74b95f889492393a621e2130a2caff4c0079782d0a8048a3cad052af50b4")
+        #expect(TokenExport.tokenSetVersion == pin["token-set-version"])
+        #expect(TokenExport.publishLabel == pin["publish-label"])
+        #expect(TokenExport.sha256 == pin["sha256"])
     }
 
     @Test("Device classes are the export's, in its order, with its screen sizes")

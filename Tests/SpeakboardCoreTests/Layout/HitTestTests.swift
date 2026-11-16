@@ -77,6 +77,25 @@ struct HitTestTests {
         }
     }
 
+    @Test("Rows 1, 3 and 4 end exactly at the key area's edges, so a touch at its right edge hits no key")
+    func keyAreaEdges() throws {
+        for (deviceClass, orientation) in allClassesAndOrientations {
+            let layout = try englishLayout(deviceClass, orientation)
+            let context = "\(deviceClass) \(orientation)"
+            let area = layout.keyArea
+            for row in [0, 2, 3].map({ rows(layout)[$0] }) {
+                let first = row[0]
+                let last = row[row.count - 1]
+                #expect(first.frame.minX == area.minX, "\(context) \(first.kind)")
+                #expect(last.frame.maxX == area.maxX, "\(context) \(last.kind) ends at \(last.frame.maxX)")
+                let y = last.frame.center.y
+                #expect(layout.key(at: LayoutPoint(x: area.maxX, y: y)) == nil, "\(context) at the key area's edge")
+                #expect(layout.key(at: LayoutPoint(x: area.maxX.nextDown, y: y)) == last, "\(context)")
+                #expect(layout.key(at: LayoutPoint(x: area.minX, y: y)) == first, "\(context)")
+            }
+        }
+    }
+
     @Test("No two keys overlap, so a touch is never inside two keys")
     func noOverlaps() throws {
         for (deviceClass, orientation) in allClassesAndOrientations {

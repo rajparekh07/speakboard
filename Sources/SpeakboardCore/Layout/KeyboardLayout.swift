@@ -6,6 +6,13 @@
 // Hit-testing allocates nothing: the frames are computed once, when the layout
 // is built, and `key(at:)` only reads them. Key and KeyKind are plain values
 // with no references in them.
+//
+// The bottom row is Apple's default row, as the token export assumes it when it
+// derives key.space.width: 123, emoji, space, return on iPhones with a home
+// indicator; 123, globe, dictation, space, return on iPhones with a home button.
+// It is not our final bottom row. Where our own mic key goes is an open
+// decision, outside the tokens (the export calls it "a canvas decision, not a
+// token"), and this layout does not make it.
 
 /// What a key is.
 public enum KeyKind: Equatable, Sendable {
@@ -17,11 +24,14 @@ public enum KeyKind: Equatable, Sendable {
     case delete
     /// The "123" key, at the left of the bottom row.
     case modeSwitch
-    /// The emoji key, in the bottom row on iPhones with a home indicator.
+    /// The emoji key, in Apple's default bottom row on iPhones with a home indicator. Our mic key's slot is not
+    /// decided yet; see the note at the top of this file.
     case emoji
-    /// The globe key, in the bottom row on iPhones with a home button.
+    /// The globe key, in Apple's default bottom row on iPhones with a home button. Our mic key's slot is not
+    /// decided yet; see the note at the top of this file.
     case globe
-    /// The dictation key, in the bottom row on iPhones with a home button.
+    /// Apple's dictation key, in Apple's default bottom row on iPhones with a home button. It is not our mic key,
+    /// whose slot is not decided yet; see the note at the top of this file.
     case dictation
     /// The space bar.
     case space
@@ -42,7 +52,8 @@ public struct Key: Equatable, Sendable {
 /// The keyboard view is the suggestion bar's strip on top and the key area below it, as wide as the screen in
 /// this orientation. Its height is `keyboard.totalHeight`. The strip holds nothing yet.
 public struct KeyboardLayout: Sendable {
-    /// The locale whose letters layout this is.
+    /// The locale whose letters layout this is: the one the data holds, which can be the language of the locale
+    /// asked for (see `init`).
     public let locale: LayoutLocale
     /// The device class.
     public let deviceClass: DeviceClass
@@ -60,13 +71,15 @@ public struct KeyboardLayout: Sendable {
     /// Every key, row by row from the top, each row from left to right.
     public let keys: [Key]
 
-    /// The layout for `locale` on `deviceClass` in `orientation`, or nil if the locale has no layout data.
+    /// The layout for `locale` on `deviceClass` in `orientation`, or nil if neither the locale nor its language
+    /// has layout data. The data for the locale itself is used if there is any, otherwise its language's: "en-US",
+    /// "en_GB" and "EN" all get the "en" layout (`LayoutLocale.language`). "fr" gets nil today.
     public init?(locale: LayoutLocale, deviceClass: DeviceClass, orientation: Orientation) {
-        guard let letters = LetterLayouts.byLocale[locale] else { return nil }
+        guard let (dataLocale, letters) = LetterLayouts.rows(for: locale) else { return nil }
         let metrics = Metrics.of(deviceClass, orientation)
         let width = orientation == .portrait ? deviceClass.screenWidth : deviceClass.screenHeight
 
-        self.locale = locale
+        self.locale = dataLocale
         self.deviceClass = deviceClass
         self.orientation = orientation
         self.metrics = metrics
@@ -109,10 +122,13 @@ public struct KeyboardLayout: Sendable {
             keyArea.minY + metrics.keyboardInsetTop.value + Double(row) * (keyHeight + metrics.keyGapVertical.value)
         }
 
-        // Lays out keys left to right from `x`, one gap apart.
-        func append(_ row: [(KeyKind, Double)], from x: Double, top: Double) {
+        // Lays out keys left to right from `x`, one gap apart. With `end`, the last key is placed so that it ends
+        // at `end`, not where the running sum of widths and gaps puts it: the sum can land a rounding step past the
+        // key area's edge.
+        func append(_ row: [(KeyKind, Double)], from x: Double, top: Double, endingAt end: Double? = nil) {
             var x = x
-            for (kind, width) in row {
+            for (index, (kind, width)) in row.enumerated() {
+                if let end, index == row.count - 1 { x = end - width }
                 keys.append(Key(kind: kind, frame: LayoutRect(x: x, y: top, width: width, height: keyHeight)))
                 x += width + gap
             }
@@ -124,10 +140,11 @@ public struct KeyboardLayout: Sendable {
             append(row.map { (.letter($0), letterWidth) }, from: left + (right - left - rowWidth) / 2, top: top)
         }
 
-        // Rows 1 and 2: letters, centred in the key area. Row 1 fills it edge to edge.
-        for row in 0..<2 {
-            appendLetters(letters.rows[row], between: keyArea.minX, and: keyArea.maxX, top: rowTop(row))
-        }
+        // Row 1: letters edge to edge across the key area. Row 2: letters centred in it.
+        append(
+            letters.rows[0].map { (.letter($0), letterWidth) }, from: keyArea.minX, top: rowTop(0),
+            endingAt: keyArea.maxX)
+        appendLetters(letters.rows[1], between: keyArea.minX, and: keyArea.maxX, top: rowTop(1))
 
         // Row 3: shift at the left edge, delete at the right, letters centred between them.
         let shiftWidth = metrics.keyShiftWidth.value
@@ -137,8 +154,8 @@ public struct KeyboardLayout: Sendable {
             letters.rows[2], between: keyArea.minX + shiftWidth, and: keyArea.maxX - deleteWidth, top: rowTop(2))
         append([(.delete, deleteWidth)], from: keyArea.maxX - deleteWidth, top: rowTop(2))
 
-        // Row 4, the bottom row, as the export's key.space.width derivation assumes it: 123, emoji, space, return
-        // with a home indicator; 123, globe, dictation, space, return with a home button.
+        // Row 4, the bottom row: Apple's default, as the export's key.space.width derivation assumes it. Our mic
+        // key's slot is an open decision outside the tokens (see the note at the top of this file).
         let utility = metrics.keyUtilityWidth.value
         let utilities: [(KeyKind, Double)] =
             deviceClass.hasHomeIndicator ? [(.emoji, utility)] : [(.globe, utility), (.dictation, utility)]
@@ -146,7 +163,7 @@ public struct KeyboardLayout: Sendable {
             [(KeyKind.modeSwitch, metrics.keyModeSwitchWidth.value)] + utilities + [
                 (.space, metrics.keySpaceWidth.value), (.returnKey, metrics.keyReturnWidth.value),
             ]
-        append(bottomRow, from: keyArea.minX, top: rowTop(3))
+        append(bottomRow, from: keyArea.minX, top: rowTop(3), endingAt: keyArea.maxX)
 
         return keys
     }

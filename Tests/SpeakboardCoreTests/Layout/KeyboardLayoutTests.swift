@@ -221,7 +221,18 @@ struct LayoutLocaleTests {
         #expect(english.rows.map(\.count) == [10, 9, 7])
     }
 
-    @Test("A locale with no layout data gives no layout", arguments: ["fr", "de", "en-GB", ""])
+    @Test(
+        "A locale with a region or another spelling gets its language's layout",
+        arguments: ["en-US", "en-GB", "en_GB", "EN", "en-Latn-US"])
+    func languageFallback(_ identifier: String) throws {
+        let layout = try #require(
+            KeyboardLayout(
+                locale: LayoutLocale(identifier: identifier), deviceClass: .iphone393x852, orientation: .portrait))
+        #expect(layout.locale == .english)
+        #expect(layout.keys == (try englishLayout(.iphone393x852, .portrait)).keys)
+    }
+
+    @Test("A locale whose language has no layout data gives no layout", arguments: ["fr", "de-DE", "e", "", "-en"])
     func otherLocale(_ identifier: String) {
         let layout = KeyboardLayout(
             locale: LayoutLocale(identifier: identifier), deviceClass: .iphone393x852, orientation: .portrait)
