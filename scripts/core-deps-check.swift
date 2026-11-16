@@ -19,8 +19,9 @@
 // is always built as Swift 6: the core target sets no build settings at all
 // (no `swiftSettings`, `cSettings`, `cxxSettings` or `linkerSettings`, which
 // also rules out a language mode, defines, upcoming features and unsafe flags),
-// the package sets no `swiftLanguageModes`, and its tools version is 6.0 or
-// later, below which a target defaults to Swift 5 mode.
+// the package sets no `swiftLanguageModes`, and its tools version is 6.x:
+// below 6.0 a target defaults to Swift 5 mode, and a later major version may
+// default to a later mode than the imports guard reads.
 //
 // This check closes those ways, not every way: it reads only these keys of the
 // package, the target and the product.
@@ -104,6 +105,17 @@ else {
 
 if major < 6 {
     fail("the package's tools version is \(toolsVersion). Below 6.0 the core would build as Swift 5.")
+}
+
+// A later major tools version may default to a later language mode, while the
+// imports guard reads every file as Swift 6. Fail closed: moving to it means
+// changing both guards together (KEY-56 review round 1).
+if major > 6 {
+    fail(
+        "the package's tools version is \(toolsVersion). This guard vouches only for 6.x, whose default language mode"
+            + " is Swift 6, the mode the imports guard reads core files in (-swift-version 6). Change both guards"
+            + " together to move past 6."
+    )
 }
 
 // The library product is what an app links. A target bundled into it beside

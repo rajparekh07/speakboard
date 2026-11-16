@@ -11,6 +11,7 @@
 set -euo pipefail
 
 guard="$(cd "$(dirname "$0")" && pwd)/core-deps-guard.sh"
+check="$(cd "$(dirname "$0")" && pwd)/core-deps-check.swift"
 work=".build/core-deps-selftest"
 rm -rf "$work"
 mkdir -p "$work"
@@ -98,6 +99,45 @@ extra='swiftLanguageModes: [.v6]' expect fail "Swift 6 language mode named on th
 tools=5.10 expect fail "tools version 5.10 (Swift 5 mode by default)" '.target(name: "SpeakboardCore")' \
     "FAIL: the package's tools version is 5.10.0"
 tools=6.1 expect pass "tools version 6.1" '.target(name: "SpeakboardCore")'
+# The pinned toolchain refuses a manifest newer than itself, so today a 7.0 package fails before the check runs.
+tools=7.0 expect fail "tools version 7.0 (the toolchain refuses it)" '.target(name: "SpeakboardCore")' \
+    "FAIL: could not read the package"
+
+# A later toolchain would read such a package, so the check itself must refuse a major tools version above 6. It is
+# fed the description of a valid package with its tools version changed, as that toolchain would print it.
+check_tools() {
+    local version="$1" want="$2" message="${3:-}" description="tools version $1 in the package description"
+    local dir="$work/tools$RANDOM" output got
+    mkdir -p "$dir"
+    printf '// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: "Case", products: [%s], targets: [.target(name: "SpeakboardCore")])\n' \
+        "$core_product" > "$dir/Package.swift"
+    if ! output=$(swift package --package-path "$dir" dump-package 2>&1); then
+        echo "core dependency guard self-test: WRONG: $description (could not dump the package)" >&2
+        failures=$((failures + 1))
+        return
+    fi
+    output=$(printf '%s' "$output" | sed "s/\"_version\" : \"6.0.0\"/\"_version\" : \"$version\"/")
+    if ! grep -qF "\"_version\" : \"$version\"" <<< "$output"; then
+        echo "core dependency guard self-test: WRONG: $description (the tools version was not replaced)" >&2
+        failures=$((failures + 1))
+        return
+    fi
+    if output=$(printf '%s' "$output" | swift "$check" 2>&1); then got=pass; else got=fail; fi
+    if [ "$got" != "$want" ]; then
+        echo "core dependency guard self-test: WRONG: $description (wanted $want, got $got)" >&2
+        echo "$output" >&2
+        failures=$((failures + 1))
+    elif [ "$want" = fail ] && ! grep -qF -- "$message" <<< "$output"; then
+        echo "core dependency guard self-test: WRONG: $description (failed, but not with \"$message\")" >&2
+        echo "$output" >&2
+        failures=$((failures + 1))
+    else
+        echo "core dependency guard self-test: ok: $description ($want)"
+    fi
+}
+check_tools 6.9.0 pass
+check_tools 7.0.0 fail "FAIL: the package's tools version is 7.0.0. This guard vouches only for 6.x"
+check_tools 10.0.0 fail "FAIL: the package's tools version is 10.0.0. This guard vouches only for 6.x"
 
 expect fail "a binary target named SpeakboardCore" \
     '.binaryTarget(name: "SpeakboardCore", url: "https://example.invalid/core.zip", checksum: "'"$(printf '0%.0s' {1..64})"'")' \
