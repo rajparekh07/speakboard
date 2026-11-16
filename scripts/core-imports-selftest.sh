@@ -2,8 +2,9 @@
 # Proves the core imports guard works: it must pass on Foundation-only code and
 # on code that only looks like an import or a directive, fail on every
 # conditional-compilation directive the compiler honours, and fail on each way
-# of importing another module, naming that module. It must also fail closed when the
-# compiler frontend is missing, fails, or writes nothing. Each failing case
+# of importing another module, naming that module. It must also fail closed when
+# grep cannot read a file, and when the compiler frontend is missing, fails, or
+# writes nothing. Each failing case
 # must fail with its own message, so a case cannot pass by failing for another
 # reason. Runs on throwaway folders outside Sources/. Runs inside the Swift
 # image.
@@ -158,6 +159,13 @@ mkdir -p "$work/newline/Area"
 printf 'import Dispatch\n' > "$work/newline/Area/Odd
 name.swift"
 check fail "a file name with a newline, importing Dispatch" "name.swift imports Dispatch" "$guard" "$work/newline"
+# A grep that cannot read the file (status 2). chmod 000 would not do: the
+# container may run as root, which reads the file anyway.
+mkdir -p "$work/broken-grep"
+printf '#!/bin/sh\necho "grep: read error" >&2\nexit 2\n' > "$work/broken-grep/grep"
+chmod +x "$work/broken-grep/grep"
+check fail "grep fails to read a file (status 2)" "FAIL: could not read $work/good/Area/Case.swift" \
+    env PATH="$work/broken-grep:$PATH" "$guard" "$work/good"
 check fail "no compiler frontend" "is not available" env SWIFT_FRONTEND="$work/no-such-frontend" "$guard" "$work/good"
 printf '#!/bin/sh\nexit 0\n' > "$work/silent-frontend"
 chmod +x "$work/silent-frontend"

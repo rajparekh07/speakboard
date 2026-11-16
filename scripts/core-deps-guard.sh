@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # The core dependency guard. Fails if the SpeakboardCore target in Package.swift
 # is not a regular target, declares any dependency (another target, or a
-# product of another package), or sets `path`, `sources`, plugins or unsafe
-# flags, or if the SpeakboardCore product holds any target but SpeakboardCore.
-# Those are ways to compile code into the core, or ship code beside it, from
-# outside the folder the core guard reads. It does not close every way: see
+# product of another package), or sets `path`, `sources`, plugins or any build
+# setting, if the package could build the core in a language mode other than
+# Swift 6 (it sets `swiftLanguageModes`, or its tools version is below 6.0), or
+# if the SpeakboardCore product holds any target but SpeakboardCore. Those are
+# ways to compile code into the core, or ship code beside it, from outside the
+# folder the core guard reads, or to build the core in a mode the imports guard
+# does not read it in. It does not close every way: see
 # scripts/core-deps-check.swift.
 #
 # It reads the package as SwiftPM evaluates it (`swift package dump-package`),

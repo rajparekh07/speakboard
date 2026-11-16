@@ -38,6 +38,12 @@
 #    only parses for this: it neither type-checks the file nor needs the module
 #    to exist.
 #
+#    It reads every file as Swift 6 (`-swift-version 6`), the mode the core is
+#    built in. In another mode the same text can be other code (with Swift 5
+#    and custom `/` operators, a regex literal here can be an import there), so
+#    the core dependency guard fails if the package could build the core in any
+#    other mode (KEY-56).
+#
 #    Allowed modules: Foundation only. The output lists only the file's own
 #    import declarations: for a file with no import it is empty (checked with
 #    the pinned Swift 6.4.2: no implicit module such as Swift or _Concurrency

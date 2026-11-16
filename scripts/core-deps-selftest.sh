@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Proves the core dependency guard works: it must pass on a core with no
 # dependencies, and fail on each way of adding one, on a core that sets
-# `path`, `sources`, plugins or unsafe flags, on a core that is not a regular
-# target, and on a SpeakboardCore product that holds another target. Each failing case must fail with
+# `path`, `sources`, plugins or any build setting, on a package that could build
+# the core in a language mode other than Swift 6, on a core that is not a
+# regular target, and on a SpeakboardCore product that holds another target.
+# Each failing case must fail with
 # its own message, so a case cannot pass by failing for another reason. Runs on
 # throwaway packages in .build, never on the real Package.swift. Runs inside the
 # Swift image.
@@ -20,18 +22,21 @@ core_product='.library(name: "SpeakboardCore", targets: ["SpeakboardCore"])'
 # expect pass <description> <targets> [""] [products]
 # expect fail <description> <targets> <text the failure message must contain> [products]
 # Products default to a SpeakboardCore library holding only the core target.
+# Set `tools` to change the tools version (default 6.0), and `extra` to add
+# arguments to Package(...) after the targets.
 expect() {
     local want="$1" description="$2" targets="$3" message="${4:-}" products="${5-$core_product}"
     local dir="$work/case$RANDOM"
     mkdir -p "$dir"
     cat > "$dir/Package.swift" <<EOF
-// swift-tools-version: 6.0
+// swift-tools-version: ${tools:-6.0}
 import PackageDescription
 let package = Package(
     name: "Case",
     products: [$products],
     dependencies: [.package(url: "https://example.invalid/net.git", from: "1.0.0")],
-    targets: [$targets]
+    targets: [$targets]${extra:+,
+    $extra}
 )
 EOF
     local output got
@@ -52,8 +57,6 @@ deps="FAIL: the SpeakboardCore target declares dependencies"
 sets="FAIL: the SpeakboardCore target sets"
 
 expect pass "no dependencies" '.target(name: "SpeakboardCore"), .target(name: "Net")'
-expect pass "a setting that is not an unsafe flag" \
-    '.target(name: "SpeakboardCore", swiftSettings: [.define("SPEAKBOARD")])'
 expect fail "a target in this package" \
     '.target(name: "Net"), .target(name: "SpeakboardCore", dependencies: ["Net"])' "$deps"
 expect fail "a target, written as .target" \
@@ -77,6 +80,24 @@ expect fail "an unsafe Swift flag" \
     "$sets \`unsafeFlags\`"
 expect fail "an unsafe linker flag" \
     '.target(name: "SpeakboardCore", linkerSettings: [.unsafeFlags(["-lnet"])])' "$sets \`unsafeFlags\`"
+expect fail "a Swift define" \
+    '.target(name: "SpeakboardCore", swiftSettings: [.define("SPEAKBOARD")])' "$sets \`define\`"
+expect pass "an empty swiftSettings list (no setting)" '.target(name: "SpeakboardCore", swiftSettings: [])'
+expect fail "Swift 5 language mode on the core (the KEY-21 round 5 reproduction)" \
+    '.target(name: "SpeakboardCore", swiftSettings: [.swiftLanguageMode(.v5)])' "$sets \`swiftLanguageMode\`"
+expect fail "an upcoming feature" \
+    '.target(name: "SpeakboardCore", swiftSettings: [.enableUpcomingFeature("ExistentialAny")])' \
+    "$sets \`enableUpcomingFeature\`"
+expect fail "a C setting" '.target(name: "SpeakboardCore", cSettings: [.define("NET")])' "$sets \`define\` (a c setting"
+expect fail "a linked library" \
+    '.target(name: "SpeakboardCore", linkerSettings: [.linkedLibrary("net")])' "$sets \`linkedLibrary\`"
+extra='swiftLanguageModes: [.v5]' expect fail "Swift 5 language mode on the package" \
+    '.target(name: "SpeakboardCore")' "FAIL: the package sets \`swiftLanguageModes\`"
+extra='swiftLanguageModes: [.v6]' expect fail "Swift 6 language mode named on the package" \
+    '.target(name: "SpeakboardCore")' "FAIL: the package sets \`swiftLanguageModes\`"
+tools=5.10 expect fail "tools version 5.10 (Swift 5 mode by default)" '.target(name: "SpeakboardCore")' \
+    "FAIL: the package's tools version is 5.10.0"
+tools=6.1 expect pass "tools version 6.1" '.target(name: "SpeakboardCore")'
 
 expect fail "a binary target named SpeakboardCore" \
     '.binaryTarget(name: "SpeakboardCore", url: "https://example.invalid/core.zip", checksum: "'"$(printf '0%.0s' {1..64})"'")' \
