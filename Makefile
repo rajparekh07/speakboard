@@ -20,7 +20,9 @@ check: guard docker-ready guard-deps build test format-check
 	@echo "make check: OK"
 
 # docker-ready: start dockerd if needed and make sure the Swift image is present.
+# The self-test of its stale containerd pid check runs first and needs no daemon.
 docker-ready:
+	@scripts/containerd-stale-pid-selftest.sh
 	@scripts/docker-ready.sh $(SWIFT_TAG)
 
 # guard: the core never imports FoundationNetworking and never uses URLSession.

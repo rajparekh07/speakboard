@@ -3,6 +3,10 @@
 #
 # 1. Starts the Docker daemon if it is not running. In an agent container
 #    nothing starts it, so this runs `dockerd` in the background as root.
+#    Before that, if no dockerd is running, it clears a stale containerd pid
+#    file left by a daemon that did not shut down cleanly
+#    (scripts/containerd-stale-pid.sh). Otherwise dockerd waits for that
+#    process, which no longer exists, and gives up.
 # 2. Makes sure the pinned Swift image is present. Docker Hub rate-limits
 #    anonymous pulls, so it pulls from mirror.gcr.io first and from Docker Hub
 #    only if the mirror fails, retrying each with backoff.
@@ -24,6 +28,11 @@ if ! docker info > /dev/null 2>&1; then
         echo "docker-ready: FAIL: the Docker daemon is not running or not reachable by this user." >&2
         echo "Start it as root (nohup dockerd > /tmp/dockerd.log 2>&1 &), or give this user access to the Docker socket." >&2
         exit 1
+    fi
+    # Only when we know no dockerd is running: a running daemon owns its
+    # containerd, and its files are not ours to remove.
+    if command -v pgrep > /dev/null 2>&1 && ! pgrep -x dockerd > /dev/null; then
+        "$(dirname "$0")/containerd-stale-pid.sh"
     fi
     echo "docker-ready: starting dockerd (log: /tmp/dockerd.log)"
     nohup dockerd > /tmp/dockerd.log 2>&1 &

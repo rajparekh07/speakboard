@@ -1,5 +1,5 @@
-# Rung 1 on GitHub: runs `make check` on every push to the branch, on a
-# GitHub-hosted Linux runner. The Makefile runs Swift in the pinned image
+# Rung 1 on GitHub: runs `make check` on every push to the working branch and
+# to `main` (ADR-0021), on a GitHub-hosted Linux runner. The Makefile runs Swift in the pinned image
 # (SWIFT_TAG), so CI and a local `make check` use the same image and steps.
 #
 # On a hosted runner the Docker daemon is already running and the runner user
@@ -9,7 +9,9 @@ name: linux
 
 on:
   push:
-    branches: [feature/sharp-einstein-aydugs]
+    # No pull_request trigger: the push run on the head commit already shows on
+    # the pull request, and a second trigger would run everything twice.
+    branches: [feature/sharp-einstein-aydugs, main]
 
 permissions:
   contents: read

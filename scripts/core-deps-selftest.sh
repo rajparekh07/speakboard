@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Proves the core dependency guard works: it must pass on a core with no
-# dependencies, and fail on each way of adding one and on a core that sets
-# `path`, `sources`, plugins or unsafe flags. Each failing case must fail with
+# dependencies, and fail on each way of adding one, on a core that sets
+# `path`, `sources`, plugins or unsafe flags, on a core that is not a regular
+# target, and on a SpeakboardCore product that holds another target. Each failing case must fail with
 # its own message, so a case cannot pass by failing for another reason. Runs on
 # throwaway packages in .build, never on the real Package.swift. Runs inside the
 # Swift image.
@@ -14,10 +15,13 @@ mkdir -p "$work"
 
 failures=0
 
-# expect pass <description> <targets>
-# expect fail <description> <targets> <text the failure message must contain>
+core_product='.library(name: "SpeakboardCore", targets: ["SpeakboardCore"])'
+
+# expect pass <description> <targets> [""] [products]
+# expect fail <description> <targets> <text the failure message must contain> [products]
+# Products default to a SpeakboardCore library holding only the core target.
 expect() {
-    local want="$1" description="$2" targets="$3" message="${4:-}"
+    local want="$1" description="$2" targets="$3" message="${4:-}" products="${5-$core_product}"
     local dir="$work/case$RANDOM"
     mkdir -p "$dir"
     cat > "$dir/Package.swift" <<EOF
@@ -25,6 +29,7 @@ expect() {
 import PackageDescription
 let package = Package(
     name: "Case",
+    products: [$products],
     dependencies: [.package(url: "https://example.invalid/net.git", from: "1.0.0")],
     targets: [$targets]
 )
@@ -55,7 +60,7 @@ expect fail "a target, written as .target" \
     '.target(name: "Net"), .target(name: "SpeakboardCore", dependencies: [.target(name: "Net")])' "$deps"
 expect fail "a product of another package" \
     '.target(name: "SpeakboardCore", dependencies: [.product(name: "Net", package: "net")])' "$deps"
-expect fail "no SpeakboardCore target" '.target(name: "Net")' "FAIL: Package.swift has no SpeakboardCore target"
+expect fail "no SpeakboardCore target" '.target(name: "Net")' "FAIL: Package.swift has no SpeakboardCore target" ''
 expect fail "a path to another folder" \
     '.target(name: "SpeakboardCore", path: "Sources/Elsewhere")' "$sets \`path\`"
 expect fail "a path to the default folder" \
@@ -72,6 +77,15 @@ expect fail "an unsafe Swift flag" \
     "$sets \`unsafeFlags\`"
 expect fail "an unsafe linker flag" \
     '.target(name: "SpeakboardCore", linkerSettings: [.unsafeFlags(["-lnet"])])' "$sets \`unsafeFlags\`"
+
+expect fail "a binary target named SpeakboardCore" \
+    '.binaryTarget(name: "SpeakboardCore", url: "https://example.invalid/core.zip", checksum: "'"$(printf '0%.0s' {1..64})"'")' \
+    "FAIL: the SpeakboardCore target is of type \`binary\`"
+expect fail "another target in the SpeakboardCore product" \
+    '.target(name: "SpeakboardCore"), .target(name: "Net")' "FAIL: the SpeakboardCore product holds targets" \
+    '.library(name: "SpeakboardCore", targets: ["SpeakboardCore", "Net"])'
+expect fail "no SpeakboardCore product" '.target(name: "SpeakboardCore")' \
+    "FAIL: Package.swift has no SpeakboardCore product" ''
 
 rm -rf "$work"
 

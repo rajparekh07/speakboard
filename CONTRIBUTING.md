@@ -13,8 +13,8 @@ make check
 `make check` runs these steps in order, and stops at the first failure:
 
 1. **Core guard.** It first runs its own self-test, then checks that `Sources/SpeakboardCore` never mentions `FoundationNetworking` or any `URLSession` name. It follows symbolic links, because SwiftPM compiles a linked file into the core.
-2. **Docker ready.** It starts `dockerd` if it is not running, and pulls the Swift image if it is missing.
-3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` declares no dependencies and sets no `path`, `sources`, plugins or unsafe flags. Those are ways to compile code into the core from outside the folder the core guard reads. It does not close every way: it does not check the target's other settings. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
+2. **Docker ready.** It first runs the self-test of its stale containerd pid check, which needs no daemon. It starts `dockerd` if it is not running, and pulls the Swift image if it is missing.
+3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` is a regular target, declares no dependencies and sets no `path`, `sources`, plugins or unsafe flags, and that the `SpeakboardCore` product holds only that target. Those are ways to compile code into the core, or ship code beside it, from outside the folder the core guard reads. It does not close every way: it does not check the target's other settings. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
 4. **Build.** `swift build`
 5. **Tests.** `swift test`
 6. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests` and `scripts`.
@@ -30,6 +30,7 @@ The image is pinned by tag, not by digest. A tag can be re-pushed to point at a 
 `make check` works in a fresh agent container with nothing set up. Expect two things on the first run:
 
 * Nothing starts `dockerd`, so `make check` starts it in the background, as root. Its log is `/tmp/dockerd.log`.
+* If `docker info` fails after the container's worker restarted, and `/tmp/dockerd.log` says "containerd is still running" for a process that no longer exists before `dockerd` exits, a stale `/var/run/docker/containerd/containerd.pid` is the cause. `make check` removes it, and the sockets beside it, before it starts `dockerd`, but only when no `dockerd` is running and the pid's process does not exist.
 * The image is about 1.3 GB to download. Docker Hub rate-limits anonymous pulls, so `make check` pulls from `mirror.gcr.io/library/swift` first and from Docker Hub only if the mirror fails.
 
 ### Other targets
@@ -54,13 +55,18 @@ Each ticket goes through this loop.
 4. A fresh reviewer reviews the pushed commits against the ticket. It checks the evidence itself. Its verdict is **approve**, **approve with changes** or **rework**. Each finding is a **blocker**, **should-fix** or **nit**.
 5. If the verdict is not approve, the builder fixes every blocker and should-fix, or disputes it in writing with a reason the next reviewer can check. It answers every nit. It pushes the fixes on top.
 6. A new reviewer reviews the new head. The loop ends when a round approves with no blocker or should-fix open. After 5 rounds, the orchestrator stops and asks the owner.
-7. The orchestrator records each round on the Linear ticket. It moves the ticket to Done once the approved commits are on the branch and their checks pass.
+7. The orchestrator records each round on the Linear ticket. It moves the ticket to Done once the approved commits are on the working branch and their checks pass. Approved work reaches `main` through the pull request, which the orchestrator merges only when the owner says so.
 
 A fresh fixer replaces the builder when the same finding survives two rounds, when the findings say the approach is wrong, or when the builder's context has degraded. The orchestrator asks the owner before round 5 if a dispute survives a second reviewer, or if round 3 repeats round 2's findings.
 
 ## Where work lands
 
-There is one branch, `feature/sharp-einstein-aydugs`. Every ticket is built on it and pushed to it. There is no `main` and there are no pull requests, so reviews are recorded on the Linear ticket.
+There are two branches (ADR-0021, which replaced the one-branch rule of ADR-0013 on 16 Nov 2026):
+
+* `feature/sharp-einstein-aydugs` is the working branch. Every ticket is built on it and pushed to it, one repo-changing ticket at a time, and reviewed there. Reviews are recorded on the Linear ticket.
+* `main` holds work a fresh reviewer has approved. It reaches `main` through one pull request from the working branch. The orchestrator opens it and merges it only when the owner says so in the session. `main` is never red: nothing is merged unless the checks passed on the commit being merged.
+
+A builder pushes only to the working branch. It never pushes to `main`, never creates a branch, and never opens or merges a pull request.
 
 Push your commits, so that nothing is lost if the container is reclaimed. The reviewer reviews a named commit. If a ticket is rejected and cannot be rescued, the orchestrator reverts its commits.
 
@@ -85,9 +91,9 @@ Every testing report names the rung that verified the work.
 | 3. The owner's Mac | Remote Control from the Claude desktop app | Interactive Xcode, the simulator, Instruments | No Mac yet. Nothing depends on it |
 | 4. A real iPhone | TestFlight | Latency, memory, battery, haptics, the app hop, the microphone. The only rung that proves a budget | No developer account or test iPhone yet |
 
-Rung 1 also runs on GitHub. Every push to the branch runs `make check` on a GitHub-hosted Linux runner (`.github/workflows/linux.yml`), and each run uploads its log as the artifact `make-check-log`. Still run `make check` yourself before you push.
+Rung 1 also runs on GitHub. Every push to the working branch or to `main` runs `make check` on a GitHub-hosted Linux runner (`.github/workflows/linux.yml`), and each run uploads its log as the artifact `make-check-log`. Still run `make check` yourself before you push.
 
-To read a run, read its job log with the GitHub job-log tool (`get_job_logs`); it holds the full `make check` output. You can list a run's artifacts, but you cannot download their contents from a session until the owner resolves KEY-54. Do not try, and do not ask the owner for a network change for it.
+To read a run, read its job log with the GitHub job-log tool (`get_job_logs`). To find the job, list the branch's runs and match the head SHA, then list that run's jobs; for a red run, the job-log tool takes the run id with its failed-only option. The log holds the full `make check` output. You can list a run's artifacts, but you cannot download their contents from a session until the owner resolves KEY-54. Do not try, and do not ask the owner for a network change for it.
 
 ## Where code goes
 
