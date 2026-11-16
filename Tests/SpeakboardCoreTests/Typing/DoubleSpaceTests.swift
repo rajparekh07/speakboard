@@ -34,7 +34,12 @@ struct DoubleSpaceTests {
 
     @Test(
         "Not at the start, after whitespace, or after punctuation (assumption): two spaces",
-        arguments: ["", "hi ", "hi\n", "hi.", "hi,", "hi!", "\"Hi.\"", "(", ")"])
+        arguments: [
+            "", "hi ", "hi\n", "hi.", "hi,", "hi!", "\"Hi.\"", "(", ")",
+            // A Prepend character joins the space typed after it, so the text does not end with a plain space
+            // (KEY-22 review round 2).
+            "\u{600}", "hi\u{600}", "hi\u{D4E}", "x\u{110BD}",
+        ])
     func notEligible(text: String) {
         let (result, second) = Self.doubleSpace(after: text)
         #expect(result == text + "  ")

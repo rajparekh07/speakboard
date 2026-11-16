@@ -41,6 +41,12 @@
 ///   down and up events; they do not exist yet.
 /// - Send `.deleteUp` when Delete's touch ends for any reason, `touchesCancelled` included. Until `.deleteUp` or
 ///   another key arrives, the hold goes on deleting at every `.tick`.
+/// - An engine lives for one field session (the orchestrator's decision in KEY-22 review round 2). Make a fresh
+///   engine, and send it `.contextChanged`, when the keyboard appears and when the document it types into changes
+///   (another field, another app). `.contextChanged` is only for changes within that field. If the adapter keeps one
+///   engine instead, the user's Shift choice carries over into the next field and the next appearance: a Shift
+///   tapped off stays off at the start of an empty field, a manual Shift capitalises its first letter, caps lock stays
+///   on, and a pending double tap or double space (within its window) and a delete hold carry over too.
 public enum KeyEvent: Equatable, Sendable {
     /// A character key, with the character it shows in lowercase: a letter key's `KeyKind.letter` scalar. The
     /// engine uppercases it when Shift is on.
@@ -57,10 +63,11 @@ public enum KeyEvent: Equatable, Sendable {
     case deleteUp
     /// The caller's timer fired, at the time an earlier output's `nextTick` asked for (or later).
     case tick
-    /// The text or the insertion point changed outside the engine (on iOS, `textDidChange`), or the keyboard
-    /// appeared. The engine updates the automatic Shift state from the new context and changes nothing else. It
-    /// never undoes the user's own choice: a manual Shift, caps lock, and a Shift the user tapped off all stay, so
-    /// it is safe to send as often as the caller likes.
+    /// The text or the insertion point changed outside the engine, within the same field (on iOS,
+    /// `textDidChange`). The engine updates the automatic Shift state from the new context and changes nothing else.
+    /// It never undoes the user's own choice: a manual Shift, caps lock, and a Shift the user tapped off all stay, so
+    /// it is safe to send as often as the caller likes within a field. A new field, another app or the keyboard
+    /// appearing again is not a context change: make a fresh engine (see the notes above).
     case contextChanged
 }
 
@@ -140,8 +147,12 @@ public struct TypingEngine: Sendable {
 
     /// The engine for `locale`, or nil if neither the locale nor its language has typing rules. The rules for the
     /// locale itself are used if there are any, otherwise its language's, as for the letters layout: "en-US" gets
-    /// the "en" rules. English is the only locale with rules (ADR-0010). Shift starts off: send `.contextChanged`
-    /// when the keyboard appears, so it reads the field.
+    /// the "en" rules. English is the only locale with rules (ADR-0010).
+    ///
+    /// An engine lives for one field session: make one when the keyboard appears and when the document it types into
+    /// changes, then send it `.contextChanged` so it reads the field (Shift starts off). Reusing an engine across
+    /// fields carries the user's Shift choice over (see `KeyEvent`'s notes). Assumption: Apple's keyboard does not
+    /// keep caps lock, or a Shift the user set, across fields; that is not known and a device test must settle it.
     public init?(
         locale: KeyboardLocale, settings: TypingSettings = TypingSettings(), timings: TypingTimings = .estimated
     ) {
@@ -322,9 +333,10 @@ public struct TypingEngine: Sendable {
     /// The context changed outside the engine. Automatic Shift follows the new context, and nothing else changes.
     /// The user's own choice stays: caps lock, a manual Shift, and a Shift the user tapped off.
     ///
-    /// Assumptions, not measured: moving the cursor keeps a manual Shift; and a Shift the user tapped off stays off
-    /// through any context change, until the next key that types or deletes text (a character, a space, an enabled
-    /// Return, Delete's touch-down, or a repeat that deletes) or the next Shift tap. The engine cannot tell a context
+    /// Assumptions, not measured, within one field session (an engine lives for one field; see `init`): moving the
+    /// cursor keeps a manual Shift; and a Shift the user tapped off stays off through any context change, until the
+    /// next key that types or deletes text (a character, a space, an enabled Return, Delete's touch-down, or a repeat
+    /// that deletes) or the next Shift tap. The engine cannot tell a context
     /// change at the same place (iOS repeating `textDidChange`) from a move to another place without storing the
     /// text, which it does not, so it keeps the user's "off" in both: after tapping Shift off and moving the cursor to
     /// a sentence start, the next letter is lowercase.
@@ -396,13 +408,17 @@ public struct TypingEngine: Sendable {
     /// Whether `text` ends with a space (U+0020) that follows a letter or digit, possibly with closing quotes or
     /// brackets between them. It reads characters (grapheme clusters) by their first scalar, as the word delete
     /// does, so a letter followed by combining marks ("i" and U+0301) counts as a letter.
+    ///
+    /// The last character must be exactly one space, on its own. A space can join the character before it: a
+    /// Prepend scalar such as U+0600 followed by a space is one character (Unicode grapheme rule GB9b). Then the
+    /// text does not end with a plain space, there is no full stop, and the one delete that would replace the space
+    /// cannot remove the Prepend scalar with it (KEY-22 review round 2).
     private func followsAWord(afterTrailingSpace text: String) -> Bool {
+        guard text.endIndex > text.startIndex else { return false }
+        // `text.index(before:)` from a character boundary gives a character boundary; `endIndex` is one.
+        var end = text.index(before: text.endIndex)
         let scalars = text.unicodeScalars
-        guard scalars.endIndex > scalars.startIndex else { return false }
-        // A space never joins the character before it, so when the last scalar is a space, it is the last character
-        // on its own, and its index is a character boundary.
-        var end = scalars.index(before: scalars.endIndex)
-        guard scalars[end] == " " else { return false }
+        guard scalars[end] == " ", scalars.index(after: end) == scalars.endIndex else { return false }
         while end > text.startIndex {
             let previous = text.index(before: end)
             let first = scalars[previous]

@@ -205,7 +205,7 @@ struct SuggestionStripTests {
 }
 
 @Suite("Keyboard layout: locale")
-struct KeyboardKeyboardLocaleTests {
+struct KeyboardLocaleTests {
     @Test("English has a layout for every device class and orientation")
     func english() {
         for (deviceClass, orientation) in allClassesAndOrientations {

@@ -242,6 +242,38 @@ struct ShiftTests {
         #expect(empty.shift == .off)
     }
 
+    @Test(
+        "A fresh engine for a new field reads it on its first context change, whatever the old field's Shift",
+        arguments: Autocapitalization.allCases)
+    func freshEngineReadsNewField(type: Autocapitalization) {
+        for oldChoice in [KeyEvent.shift, .contextChanged] {
+            // The old field session: the user taps Shift off (or leaves it) at a sentence start, or locks it.
+            var old = Typist(Field(text: "Hi. "))
+            old.press(oldChoice)
+            old.press(.shift, after: timings.shiftDoubleTapWindow / 2)
+
+            // The new field session: a fresh engine, as the adapter makes when the document changes.
+            let new = Typist(Field(autocapitalization: type))
+            #expect(new.shift == (type == .none ? .off : .automatic), "\(type) after \(oldChoice)")
+        }
+    }
+
+    @Test("Reusing one engine across fields carries the user's Shift choice over (the adapter must not)")
+    func reusedEngineCarriesChoice() {
+        var typist = Typist(Field(text: "Hi. "))
+        typist.press(.shift)
+        typist.field = Field(autocapitalization: .sentences)
+        typist.press(.contextChanged)
+        #expect(typist.shift == .off)
+
+        var locked = Typist(Field(autocapitalization: .none))
+        locked.press(.shift)
+        locked.press(.shift, after: timings.shiftDoubleTapWindow / 2)
+        locked.field = Field(autocapitalization: .none)
+        locked.press(.contextChanged)
+        #expect(locked.shift == .locked)
+    }
+
     @Test("Every Unicode uppercase mapping is at most 15 UTF-8 bytes, so a shifted character is stored inline")
     func uppercaseMappingsAreSmall() {
         var longest = 0
