@@ -98,7 +98,7 @@ public struct ReturnKeyState: Equatable, Sendable {
 public struct TypingEngine: Sendable {
     /// The locale whose rules the engine follows: the one the data holds, which can be the language of the locale
     /// asked for (see `init`).
-    public let locale: LayoutLocale
+    public let locale: KeyboardLocale
     /// The user's keyboard settings. Change them between events at any time.
     public var settings: TypingSettings
     /// The time windows and the delete-repeat schedule.
@@ -127,7 +127,7 @@ public struct TypingEngine: Sendable {
     /// the "en" rules. English is the only locale with rules (ADR-0010). Shift starts off: send `.contextChanged`
     /// when the keyboard appears, so it reads the field.
     public init?(
-        locale: LayoutLocale, settings: TypingSettings = TypingSettings(), timings: TypingTimings = .estimated
+        locale: KeyboardLocale, settings: TypingSettings = TypingSettings(), timings: TypingTimings = .estimated
     ) {
         guard let (dataLocale, rules) = locale.entry(in: TypingRules.byLocale) else { return nil }
         self.locale = dataLocale

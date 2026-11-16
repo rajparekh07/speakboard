@@ -69,7 +69,7 @@ struct TypingAllocationTests {
     /// Records `count` events, or a few more to finish a delete hold.
     static func record(count: Int) throws -> ([Step], Coverage) {
         var random = Random(state: 22)
-        var engine = try #require(TypingEngine(locale: LayoutLocale(identifier: "en-US")))
+        var engine = try #require(TypingEngine(locale: KeyboardLocale(identifier: "en-US")))
         var field = Field()
         var time = 0.0
         var steps: [Step] = []
@@ -205,7 +205,7 @@ struct TypingAllocationTests {
             """))
     func handlingAllocatesNothing() throws {
         let (steps, _) = try Self.record(count: 20_000)
-        var engine = try #require(TypingEngine(locale: LayoutLocale(identifier: "en-US")))
+        var engine = try #require(TypingEngine(locale: KeyboardLocale(identifier: "en-US")))
         var mismatches = 0
         var deleted = 0
         var inserted = 0

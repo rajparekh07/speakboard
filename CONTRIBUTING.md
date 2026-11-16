@@ -105,6 +105,7 @@ To read a run, read its job log with the GitHub job-log tool (`get_job_logs`). T
 ```
 Package.swift
 Sources/SpeakboardCore/    the core: pure Swift, Foundation only, builds on Linux
+  KeyboardLocale.swift     the locale type, shared by every area with data per locale
   Layout/                  key layouts, per-device metrics, hit-test geometry
   Typing/                  the key-event state machine
   Autocorrect/             touch model, lexicon, language model, suggestions

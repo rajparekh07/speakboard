@@ -6,27 +6,6 @@
 // letters edge to edge, row 2 is centred, row 3 is centred between shift and
 // delete).
 
-/// A locale a keyboard layout is built for, named by its BCP 47 language identifier.
-public struct LayoutLocale: Hashable, Sendable {
-    /// The BCP 47 language identifier, for example "en".
-    public let identifier: String
-
-    /// The locale with this BCP 47 language identifier.
-    public init(identifier: String) {
-        self.identifier = identifier
-    }
-
-    /// English.
-    public static let english = LayoutLocale(identifier: "en")
-
-    /// The locale's language: its identifier up to the first "-", "_" or "@", lowercased. "en-US" and
-    /// "en@calendar=gregorian" give "en".
-    public var language: LayoutLocale {
-        let subtag = identifier.prefix { $0 != "-" && $0 != "_" && $0 != "@" }
-        return LayoutLocale(identifier: subtag.lowercased())
-    }
-}
-
 /// The three rows of letter keys of one locale's letters layout, top to bottom, each left to right.
 struct LetterRows: Sendable {
     let rows: [[Unicode.Scalar]]
@@ -38,24 +17,12 @@ struct LetterRows: Sendable {
 
 enum LetterLayouts {
     /// One letters layout per locale.
-    static let byLocale: [LayoutLocale: LetterRows] = [
+    static let byLocale: [KeyboardLocale: LetterRows] = [
         .english: LetterRows(["qwertyuiop", "asdfghjkl", "zxcvbnm"])
     ]
 
     /// The data for `locale`, or else for its language, with the locale the data is for. Nil if neither has any.
-    static func rows(for locale: LayoutLocale) -> (LayoutLocale, LetterRows)? {
+    static func rows(for locale: KeyboardLocale) -> (KeyboardLocale, LetterRows)? {
         locale.entry(in: byLocale)
-    }
-}
-
-extension LayoutLocale {
-    /// The entry for this locale in `table`, or else for its language, with the locale the entry is for. Nil if
-    /// neither has one. Every table of per-locale data (layouts, typing rules) is read through this, so they
-    /// all fall back the same way.
-    func entry<Value>(in table: [LayoutLocale: Value]) -> (LayoutLocale, Value)? {
-        if let value = table[self] { return (self, value) }
-        let language = self.language
-        if let value = table[language] { return (language, value) }
-        return nil
     }
 }

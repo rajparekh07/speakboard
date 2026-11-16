@@ -61,13 +61,13 @@ struct TypingLocaleTests {
         "English and its regional variants get the English rules",
         arguments: ["en", "en-US", "en_GB", "en@calendar=gregorian", "EN"])
     func english(identifier: String) {
-        let engine = TypingEngine(locale: LayoutLocale(identifier: identifier))
+        let engine = TypingEngine(locale: KeyboardLocale(identifier: identifier))
         #expect(engine?.locale == .english)
     }
 
     @Test("A locale with no rules, or no language, gets no engine", arguments: ["fr", "fr-CA", "", "-en"])
     func noRules(identifier: String) {
-        #expect(TypingEngine(locale: LayoutLocale(identifier: identifier)) == nil)
+        #expect(TypingEngine(locale: KeyboardLocale(identifier: identifier)) == nil)
     }
 
     @Test("The rules are data per locale, and English is the only locale with rules")

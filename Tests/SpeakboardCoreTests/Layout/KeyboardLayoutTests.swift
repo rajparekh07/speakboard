@@ -205,7 +205,7 @@ struct SuggestionStripTests {
 }
 
 @Suite("Keyboard layout: locale")
-struct LayoutLocaleTests {
+struct KeyboardKeyboardLocaleTests {
     @Test("English has a layout for every device class and orientation")
     func english() {
         for (deviceClass, orientation) in allClassesAndOrientations {
@@ -229,7 +229,7 @@ struct LayoutLocaleTests {
     func languageFallback(_ identifier: String) throws {
         let layout = try #require(
             KeyboardLayout(
-                locale: LayoutLocale(identifier: identifier), deviceClass: .iphone393x852, orientation: .portrait))
+                locale: KeyboardLocale(identifier: identifier), deviceClass: .iphone393x852, orientation: .portrait))
         #expect(layout.locale == .english)
         #expect(layout.keys == (try englishLayout(.iphone393x852, .portrait)).keys)
     }
@@ -239,7 +239,7 @@ struct LayoutLocaleTests {
         arguments: ["fr", "de-DE", "e", "", "-en", "@en", "fr@calendar=gregorian"])
     func otherLocale(_ identifier: String) {
         let layout = KeyboardLayout(
-            locale: LayoutLocale(identifier: identifier), deviceClass: .iphone393x852, orientation: .portrait)
+            locale: KeyboardLocale(identifier: identifier), deviceClass: .iphone393x852, orientation: .portrait)
         #expect(layout == nil)
     }
 }

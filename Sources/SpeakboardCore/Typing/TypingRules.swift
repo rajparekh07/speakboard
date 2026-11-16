@@ -1,6 +1,6 @@
 // The typing rules, as data: one entry per locale (ADR-0010). English is the
 // only locale with rules. A locale with no rules of its own uses its
-// language's, the same way as the letters layout (LayoutLocale.entry(in:)):
+// language's, the same way as the letters layout (KeyboardLocale.entry(in:)):
 // "en-US", "en_GB" and "EN" all get the "en" rules. A later language adds an
 // entry here; the engine's code does not change.
 //
@@ -30,7 +30,7 @@ struct TypingRules: Sendable {
     let doubleSpaceInsertion: String
 
     /// The rules per locale.
-    static let byLocale: [LayoutLocale: TypingRules] = [
+    static let byLocale: [KeyboardLocale: TypingRules] = [
         // Recalled, not measured.
         .english: TypingRules(
             sentenceTerminators: [".", "!", "?"],

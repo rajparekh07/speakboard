@@ -39,7 +39,7 @@ struct Typist {
     var time = 100.0
 
     init(
-        _ field: Field = Field(), settings: TypingSettings = TypingSettings(), locale: LayoutLocale = .english,
+        _ field: Field = Field(), settings: TypingSettings = TypingSettings(), locale: KeyboardLocale = .english,
         timings: TypingTimings = timings
     ) {
         guard let engine = TypingEngine(locale: locale, settings: settings, timings: timings) else {
