@@ -2,7 +2,7 @@
 
 **The keyboard you would keep even if you never spoke. The dictation you would keep even if you never typed.**
 
-> **Status:** v0.2, 15 Nov 2026, draft for owner review. v0.2 applies two decisions the owner made on 15 Nov 2026: English only at launch (ADR-0010) and one branch with no pull requests (ADR-0013). No code exists yet. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
+> **Status:** v0.2, accepted by the owner on 16 Nov 2026. v0.2 applies two decisions the owner made on 15 Nov 2026: English only at launch (ADR-0010) and one branch with no pull requests (ADR-0013). Only the repo skeleton exists so far. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
 
 ## Why this exists
 
