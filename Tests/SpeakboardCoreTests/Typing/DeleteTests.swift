@@ -165,11 +165,12 @@ struct DeleteTests {
     @Test(
         "deleteCharacterRepeats below 1, set after init, is read as 1: one character, then words", arguments: [0, -5])
     func characterRepeatsBelowOne(value: Int) {
-        var typist = Typist(Field(text: "one two xy"))
+        // Without the clamp, the hold deletes by word from the first repeat: [4, 4] and "".
+        var typist = Typist(Field(text: "one three"))
         typist.engine.timings.deleteCharacterRepeats = value
         #expect(typist.engine.timings.deleteCharacterRepeats == value)
         let counts = Self.hold(&typist, ticks: 2)
-        #expect(counts == [1, 4])
+        #expect(counts == [1, 3])
         #expect(typist.text == "one ")
     }
 

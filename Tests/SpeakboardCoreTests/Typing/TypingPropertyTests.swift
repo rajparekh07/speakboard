@@ -9,7 +9,11 @@ import Testing
 /// backward index steps:
 /// - a space types a full stop exactly when the model says so, and otherwise a plain space;
 /// - each Delete touch-down deletes one character, and each tick deletes what the model's repeats delete;
-/// - `nextTick` is the model's next repeat time.
+/// - `nextTick` is the model's next repeat time;
+/// - after a key that makes the engine reread the text, Shift (unless locked) is what the model's autocapitalization
+///   says.
+/// It does not check what a typed character or Return inserts, nor Shift after `.contextChanged`: ShiftTests and
+/// the other example tests cover those.
 /// It also checks what holds whatever Apple does: no trap, no key but Delete removes text except the full stop's one
 /// plain space, a delete count never exceeds the context's characters plus one, and a replay gives the same outputs.
 ///
@@ -371,7 +375,7 @@ struct TypingPropertyTests {
 
     static let seeds: [UInt64] = Array(1...400)
 
-    @Test("Every output matches the model of the documented rules, over awkward text, and the properties hold")
+    @Test("Space, Delete and Shift match the model of the documented rules over awkward text, and the properties hold")
     func properties() {
         var reach = Reach()
         var index = 0
