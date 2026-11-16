@@ -15,10 +15,11 @@ make check
 1. **Core guard.** It first runs its own self-test, then checks that `Sources/SpeakboardCore` never mentions `FoundationNetworking` or any `URLSession` name. It follows symbolic links, because SwiftPM compiles a linked file into the core.
 2. **Docker ready.** It first runs the self-test of its stale containerd pid check, which needs no daemon. It starts `dockerd` if it is not running, and pulls the Swift image if it is missing.
 3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` is a regular target, declares no dependencies and sets no `path`, `sources`, plugins or unsafe flags, and that the `SpeakboardCore` product holds only that target. Those are ways to compile code into the core, or ship code beside it, from outside the folder the core guard reads. It does not close every way: it does not check the target's other settings. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
-4. **Design tokens.** It checks that the pinned token export in `DesignTokens/` has the SHA-256 that `DesignTokens/tokens.pin` records, then runs the generator and fails if `Sources/SpeakboardCore/Layout/GeneratedMetrics.swift` differs from what it makes. See "Design tokens" below.
-5. **Build.** `swift build`
-6. **Tests.** `swift test`
-7. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests` and `scripts`.
+4. **Core imports guard.** It first runs its own self-test, then asks the compiler which modules each Swift file under `Sources/SpeakboardCore` imports (`swift-frontend -emit-imported-modules`, inside Docker) and fails, naming the file and the module, if any is not `Foundation`. Reading the compiler's answer rather than the text means every spelling of an import counts. It fails closed: a missing frontend, a non-zero exit (a syntax error, or a toolchain that drops the flag) or no output file fails it. **Its limit:** the compiler reports imports only in code it compiles, so an import in a conditional-compilation branch that is inactive on Linux, such as `#if os(macOS)`, is not seen here. macOS CI (KEY-8) must run this same check. The core guard's text search for `FoundationNetworking` and `URLSession` does cover inactive branches.
+5. **Design tokens.** It checks that the pinned token export in `DesignTokens/` has the SHA-256 that `DesignTokens/tokens.pin` records, then runs the generator and fails if `Sources/SpeakboardCore/Layout/GeneratedMetrics.swift` differs from what it makes. See "Design tokens" below.
+6. **Build.** `swift build`
+7. **Tests.** `swift test`
+8. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests` and `scripts`.
 
 It ends with `make check: OK`.
 
@@ -40,6 +41,7 @@ The image is pinned by tag, not by digest. A tag can be re-pushed to point at a 
 | -- | -- |
 | `make guard` | The core guard and its self-test only. Needs no Docker |
 | `make guard-deps` | The core dependency guard and its self-test only |
+| `make guard-imports` | The core imports guard and its self-test only |
 | `make metrics-check` | The design token step only |
 | `make metrics` | Regenerates the metrics tables from the pinned token export |
 | `make build` | `swift build` in Docker |
