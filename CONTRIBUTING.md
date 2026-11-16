@@ -77,7 +77,7 @@ Each ticket goes through this loop.
 4. A fresh reviewer reviews the pushed commits against the ticket. It checks the evidence itself. Its verdict is **approve**, **approve with changes** or **rework**. Each finding is a **blocker**, **should-fix** or **nit**.
 5. If the verdict is not approve, the builder fixes every blocker and should-fix, or disputes it in writing with a reason the next reviewer can check. It answers every nit. It pushes the fixes on top.
 6. A new reviewer reviews the new head. The loop ends when a round approves with no blocker or should-fix open. After 5 rounds, the orchestrator stops and asks the owner.
-7. The orchestrator records each round on the Linear ticket. It moves the ticket to Done once the approved commits are on the working branch and their checks pass. Approved work reaches `main` through the ticket's pull request, which the orchestrator merges once the ticket is approved (the owner's standing rule of 16 Nov 2026).
+7. The orchestrator records each round on the Linear ticket. It moves the ticket to Done once the approved commits are on the working branch and their checks pass. Approved work reaches `main` through the ticket's pull request, which the orchestrator merges once the ticket is approved (its reading of the owner's standing rule of 16 Nov 2026; see "Where work lands" below).
 
 A fresh fixer replaces the builder when the same finding survives two rounds, when the findings say the approach is wrong, or when the builder's context has degraded. The orchestrator asks the owner before round 5 if a dispute survives a second reviewer, or if round 3 repeats round 2's findings.
 
@@ -86,7 +86,7 @@ A fresh fixer replaces the builder when the same finding survives two rounds, wh
 There are two branches (ADR-0021, which replaced the one-branch rule of ADR-0013 on 16 Nov 2026):
 
 * `feature/sharp-einstein-aydugs` is the working branch. Every ticket is built on it and pushed to it, one repo-changing ticket at a time, and reviewed there. Reviews are recorded on the Linear ticket.
-* `main` holds work a fresh reviewer has approved. It reaches `main` through a pull request from the working branch: one pull request per ticket, with any small follow-up ticket reviewed with it. The orchestrator opens it, and merges it once a fresh reviewer has approved the ticket (the owner's standing rule of 16 Nov 2026, recorded on ADR-0021). After a merge, the working branch continues from `main`. `main` is never red: nothing is merged unless the checks passed on the commit being merged.
+* `main` holds work a fresh reviewer has approved. It reaches `main` through a pull request from the working branch. The owner's standing rule of 16 Nov 2026 is "merge PRs when done instead of large PRs" (recorded on ADR-0021). The orchestrator reads it so: one pull request per ticket, which may also hold a small follow-up ticket built and reviewed with it, opened by the orchestrator and merged by it once a fresh reviewer has approved the ticket. After a merge, the working branch continues from `main`. `main` is never red: nothing is merged unless the checks passed on the commit being merged.
 
 A builder pushes only to the working branch. It never pushes to `main`, never creates a branch, and never opens or merges a pull request.
 
