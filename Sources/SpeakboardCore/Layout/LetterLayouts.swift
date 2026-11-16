@@ -44,9 +44,18 @@ enum LetterLayouts {
 
     /// The data for `locale`, or else for its language, with the locale the data is for. Nil if neither has any.
     static func rows(for locale: LayoutLocale) -> (LayoutLocale, LetterRows)? {
-        for candidate in [locale, locale.language] {
-            if let rows = byLocale[candidate] { return (candidate, rows) }
-        }
+        locale.entry(in: byLocale)
+    }
+}
+
+extension LayoutLocale {
+    /// The entry for this locale in `table`, or else for its language, with the locale the entry is for. Nil if
+    /// neither has one. Every table of per-locale data (layouts, typing rules) is read through this, so they
+    /// all fall back the same way.
+    func entry<Value>(in table: [LayoutLocale: Value]) -> (LayoutLocale, Value)? {
+        if let value = table[self] { return (self, value) }
+        let language = self.language
+        if let value = table[language] { return (language, value) }
         return nil
     }
 }
