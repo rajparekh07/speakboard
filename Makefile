@@ -11,6 +11,9 @@
 # The Swift image, pinned to an exact Swift version and Ubuntu release.
 SWIFT_TAG := 6.4.2-resolute
 SWIFT_IMAGE := swift:$(SWIFT_TAG)
+# The Swift version alone (6.4.2), which make check-native requires of the
+# active toolchain.
+SWIFT_VERSION := $(firstword $(subst -, ,$(SWIFT_TAG)))
 
 # Runs a command in the Swift image with the repo mounted at /work, as the
 # calling user, so files in .build are not owned by root.
@@ -22,6 +25,12 @@ SWIFT_RUN := docker run --rm -v "$(CURDIR)":/work -w /work \
 # scripts/native-tools.sh (on macOS, `xcrun -f swift-frontend`), and fails if
 # there is none.
 ifeq ($(NATIVE),1)
+# make check: OK must only ever come from the pinned image, so make check
+# refuses NATIVE=1, from the command line or the environment. (check is also
+# the default goal.) make check-native's own call names the steps, not check.
+ifneq ($(filter check,$(if $(MAKECMDGOALS),$(MAKECMDGOALS),check)),)
+$(error make check runs only in the pinned Swift image, and NATIVE=1 is set (on the command line or in the environment). Run make check-native for the native path, or unset NATIVE)
+endif
 RUN :=
 DOCKER_READY :=
 FRONTEND := frontend="$$(scripts/native-tools.sh frontend)" && export SWIFT_FRONTEND="$$frontend" &&
@@ -47,7 +56,8 @@ check: $(CHECK_STEPS)
 	@echo "make check: OK"
 
 # check-native: the same steps on the host, without Docker. It first checks
-# that every tool they use is there, and fails, naming the tool, if one is not.
+# that every tool they use is there, and fails, naming the tool, if one is not,
+# and that the active Swift is the pinned SWIFT_VERSION.
 # docker-ready and its stale containerd pid self-test are not part of it: they
 # look after the Docker daemon on a Linux host, which this path does not use.
 check-native: native-tools
@@ -55,7 +65,7 @@ check-native: native-tools
 	@echo "make check-native: OK"
 
 native-tools:
-	@scripts/native-tools.sh check
+	@scripts/native-tools.sh check $(SWIFT_VERSION)
 
 # docker-ready: start dockerd if needed and make sure the Swift image is present.
 # The self-test of its stale containerd pid check runs first and needs no daemon.

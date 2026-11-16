@@ -3,9 +3,13 @@
 # Docker, with the active Swift toolchain, on a Mac or on any host with Swift
 # installed).
 #
-#   scripts/native-tools.sh check      fails, naming the tool, unless every tool
-#                                      the native path uses is there; then
-#                                      prints the bash, Swift and frontend in use
+#   scripts/native-tools.sh check <pinned Swift version>
+#                                      fails, naming the tool, unless every tool
+#                                      the native path uses is there, and fails
+#                                      unless the active Swift is the pinned
+#                                      version (the Makefile passes it, from
+#                                      SWIFT_TAG); then prints the bash, Swift
+#                                      and frontend in use
 #   scripts/native-tools.sh frontend   prints the path of the compiler frontend
 #                                      the core imports guard runs
 #
@@ -40,7 +44,7 @@ frontend() {
 }
 
 check() {
-    local tool developer version path
+    local pinned="$1" tool developer version active path
     # What the scripts make check-native runs call, besides bash's builtins.
     for tool in swift grep find sort sed mktemp cut diff head tr cat env uname; do
         command -v "$tool" > /dev/null 2>&1 || fail "\`$tool\` is not available"
@@ -64,16 +68,27 @@ check() {
         esac
     fi
     version=$(swift --version 2>&1 | grep -m 1 'Swift version') || fail "\`swift --version\` names no Swift version"
+    # "Swift version 6.4.2 (swift-6.4.2-RELEASE)" on Linux, "Apple Swift version 6.4.2 (swiftlang-...)" on macOS.
+    active=$(printf '%s\n' "$version" | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p')
+    if [ "$active" != "$pinned" ]; then
+        echo "native tools: FAIL: the active Swift is ${active:-unknown} ($version), but the Makefile pins $pinned." >&2
+        echo "Several of the guards' facts were checked with the pinned version. Select a toolchain with Swift $pinned," >&2
+        echo "or change the pin, which is in one place: SWIFT_TAG in the Makefile, in its own commit." >&2
+        exit 1
+    fi
     swift format --version > /dev/null 2>&1 || fail "\`swift format\` is not available"
     path=$(frontend) || exit 1
-    echo "native tools: OK (bash $BASH_VERSION; $version; frontend $path)"
+    echo "native tools: OK (bash $BASH_VERSION; Swift $active, as pinned; frontend $path)"
 }
 
 case "${1:-}" in
-    check) check ;;
+    check)
+        [ -n "${2:-}" ] || fail "usage: scripts/native-tools.sh check <pinned Swift version>"
+        check "$2"
+        ;;
     frontend) frontend ;;
     *)
-        echo "usage: scripts/native-tools.sh check|frontend" >&2
+        echo "usage: scripts/native-tools.sh check <pinned Swift version> | frontend" >&2
         exit 2
         ;;
 esac

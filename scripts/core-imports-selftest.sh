@@ -146,6 +146,12 @@ import Glibc
 expect fail "a module that does not exist" 'import NoSuchModule' "Case.swift imports NoSuchModule"
 expect fail "a file the compiler cannot parse" 'let x = (' "the compiler could not read the imports"
 
+# More than one file: each is read, not only the last one listed. A.swift sorts first and imports Dispatch.
+mkdir -p "$work/two/Area"
+printf 'import Dispatch\n' > "$work/two/Area/A.swift"
+printf 'import Foundation\n' > "$work/two/Area/B.swift"
+check fail "two files, the first importing Dispatch" "A.swift imports Dispatch" "$guard" "$work/two"
+
 # Fail closed.
 mkdir -p "$work/empty" "$work/good/Area"
 printf 'import Foundation\n' > "$work/good/Area/Case.swift"
