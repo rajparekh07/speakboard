@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Proves the core imports guard works: it must pass on Foundation-only code and
-# on code that only looks like an import, and fail on each way of importing
-# another module, naming that module. It must also fail closed when the
+# on code that only looks like an import or a directive, fail on every
+# conditional-compilation directive the compiler honours, and fail on each way
+# of importing another module, naming that module. It must also fail closed when the
 # compiler frontend is missing, fails, or writes nothing. Each failing case
 # must fail with its own message, so a case cannot pass by failing for another
 # reason. Runs on throwaway folders outside Sources/. Runs inside the Swift
@@ -63,12 +64,66 @@ expect pass "import in comments and strings" 'import Foundation
 /* /* import Dispatch */ */
 let s = "import Dispatch"
 let r = #"import "Dispatch""#'
-# The known limit, kept here so a change in it is noticed: an import in a branch
-# that is inactive on Linux is not reported. macOS CI (KEY-8) must run the guard.
-expect pass "an import in a branch inactive on Linux (known limit: not seen)" 'import Foundation
+expect pass "other uses of #: raw strings, regex literals, #file, #selector-like macros" 'import Foundation
+
+let raw = #"say "hi" #ok"#
+let regex = #/a#b/#
+let file = #file
+let line = #line
+let column = #column
+let function = #function'
+
+# Conditional compilation: every spelling the compiler honours must fail.
+cond="conditional compilation"
+expect fail "#if os(macOS) around an import (inactive on Linux)" 'import Foundation
 #if os(macOS)
 import Dispatch
-#endif'
+#endif' "Case.swift:2: $cond"
+expect fail "#if DEBUG around an import (active in swift build)" 'import Foundation
+#if DEBUG
+import RegexBuilder
+func debugRegex() -> Regex<Substring> { Regex { "a" } }
+#endif' "Case.swift:2: $cond"
+expect fail "#if SWIFT_PACKAGE" '#if SWIFT_PACKAGE
+import Dispatch
+#endif' "Case.swift:1: $cond"
+expect fail "#if canImport(UIKit)" '#if canImport(UIKit)
+import UIKit
+#endif' "Case.swift:1: $cond"
+expect fail "#if os(iOS)" '#if os(iOS)
+import UIKit
+#endif' "Case.swift:1: $cond"
+expect fail "an #if with no import in it" 'import Foundation
+#if DEBUG
+let debug = true
+#else
+let debug = false
+#endif' "Case.swift:2: $cond"
+expect fail "an indented #if" 'struct S {
+    #if DEBUG
+    let x = 1
+    #endif
+}' "Case.swift:2: $cond"
+expect fail "a tab-indented #if" "$(printf '\t#if DEBUG\nimport Dispatch\n#endif')" "Case.swift:1: $cond"
+expect fail "an #if after ; on the same line" 'let x = 1; #if DEBUG
+import Dispatch
+#endif' "Case.swift:1: $cond"
+expect fail "an #if after { on the same line" 'func f() { #if DEBUG
+    _ = 1
+    #endif
+}' "Case.swift:1: $cond"
+expect fail "#if(DEBUG) with no space" '#if(DEBUG)
+import Dispatch
+#endif' "Case.swift:1: $cond"
+expect fail "a postfix #if before .member" 'let s = [1].count
+    #if DEBUG
+    .description
+    #endif' "Case.swift:2: $cond"
+expect fail "an #if after a BOM" "$(printf '\xef\xbb\xbf#if DEBUG\nimport Dispatch\n#endif')" "Case.swift:1: $cond"
+expect fail "an #if after a CR line ending" "$(printf 'let x = 1\r#if DEBUG\r\nimport Dispatch\r#endif')" \
+    "Case.swift:1: $cond"
+expect fail "an #if in a comment (a false hit, on purpose)" 'import Foundation
+// #if DEBUG' "Case.swift:2: $cond"
 
 expect fail "import Dispatch" 'import Dispatch' "$dispatch"
 expect fail "a smart-quote regex, then import Dispatch" 'import Foundation
@@ -84,9 +139,9 @@ let range = 1...
 import Dispatch' "$dispatch"
 expect fail "an import split across lines" 'import
     Dispatch' "$dispatch"
-expect fail "an import in a branch active on Linux" '#if os(Linux)
+expect fail "#if os(Linux) around an import (active on Linux)" '#if os(Linux)
 import Glibc
-#endif' "Case.swift imports Glibc"
+#endif' "Case.swift:1: $cond"
 expect fail "a module that does not exist" 'import NoSuchModule' "Case.swift imports NoSuchModule"
 expect fail "a file the compiler cannot parse" 'let x = (' "the compiler could not read the imports"
 
@@ -95,6 +150,14 @@ mkdir -p "$work/empty" "$work/good/Area"
 printf 'import Foundation\n' > "$work/good/Area/Case.swift"
 check fail "no Swift files" "no Swift files" "$guard" "$work/empty"
 check fail "a missing folder" "folder not found" "$guard" "$work/missing"
+mkdir -p "$work/loop/Area"
+printf 'import Foundation\n' > "$work/loop/Area/Case.swift"
+ln -s .. "$work/loop/Area/Loop"
+check fail "a symbolic link loop (find fails)" "could not list the Swift files" "$guard" "$work/loop"
+mkdir -p "$work/newline/Area"
+printf 'import Dispatch\n' > "$work/newline/Area/Odd
+name.swift"
+check fail "a file name with a newline, importing Dispatch" "name.swift imports Dispatch" "$guard" "$work/newline"
 check fail "no compiler frontend" "is not available" env SWIFT_FRONTEND="$work/no-such-frontend" "$guard" "$work/good"
 printf '#!/bin/sh\nexit 0\n' > "$work/silent-frontend"
 chmod +x "$work/silent-frontend"

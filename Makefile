@@ -38,8 +38,9 @@ guard:
 guard-deps: docker-ready
 	@$(SWIFT_RUN) bash -c 'scripts/core-deps-selftest.sh && scripts/core-deps-guard.sh'
 
-# guard-imports: every Swift file in the core imports Foundation and nothing
-# else, as the compiler reads it. Its self-test runs first, for the same reason.
+# guard-imports: the core has no conditional compilation, and every Swift file
+# in it imports Foundation and nothing else, as the compiler reads it. Its
+# self-test runs first, for the same reason.
 guard-imports: docker-ready
 	@$(SWIFT_RUN) bash -c 'scripts/core-imports-selftest.sh && scripts/core-imports-guard.sh'
 
