@@ -15,7 +15,8 @@ public struct TypingTimings: Equatable, Sendable {
     public var deleteInitialDelay: Double
     /// The time between repeats while each repeat deletes one character.
     public var deleteRepeatInterval: Double
-    /// How many repeats delete one character each. Every later repeat deletes a word. At least 1.
+    /// How many repeats delete one character each. Every later repeat deletes a word. A value below 1, given to
+    /// `init` or set later, is read as 1.
     public var deleteCharacterRepeats: Int
     /// The time between repeats once each repeat deletes a word.
     public var deleteWordRepeatInterval: Double

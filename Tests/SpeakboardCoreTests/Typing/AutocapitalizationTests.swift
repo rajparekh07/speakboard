@@ -136,6 +136,15 @@ struct AutocapitalizationTests {
         #expect(typist.shift == .off)
     }
 
+    @Test("A delete of a letter written with a combining mark reads the text without the whole letter")
+    func afterDeleteOfDecomposedLetter() {
+        var typist = Typist(Field(text: "Hi. e\u{301}"))
+        #expect(typist.shift == .off)
+        typist.press(.deleteDown)
+        #expect(typist.text == "Hi. ")
+        #expect(typist.shift == .automatic)
+    }
+
     @Test("A context change reads the new context: the cursor moved to a sentence start, or away from one")
     func contextChange() {
         var typist = Typist(Field(text: "Hi"))

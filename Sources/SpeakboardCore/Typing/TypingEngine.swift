@@ -114,7 +114,8 @@ public struct ReturnKeyState: Equatable, Sendable {
     public var isEnabled: Bool
 }
 
-/// The typing state machine for one locale. A value type: copy it to fork the state, and keep one per keyboard.
+/// The typing state machine for one locale. A value type: copy it to fork the state. Keep one per field session,
+/// not one per keyboard: make a fresh engine when the keyboard appears and when the document changes (see `init`).
 public struct TypingEngine: Sendable {
     /// The locale whose rules the engine follows: the one the data holds, which can be the language of the locale
     /// asked for (see `init`).
@@ -173,6 +174,13 @@ public struct TypingEngine: Sendable {
 
     /// Handles `event`, which happened at `time` (seconds) in `context`, and returns the text operations for it.
     /// The new Shift state is in `shiftState`, and the Return key's in `returnKey(in:)` with the next context.
+    ///
+    /// Times are expected to be finite and from one clock that does not jump, as touch timestamps are. Otherwise
+    /// the engine stays safe but the timing is not meaningful: a NaN time is outside every window and does no
+    /// repeat; at magnitudes near 1e15 s and above, adding a repeat interval no longer changes the time, so the next
+    /// repeat is due at once and `nextTick` equals the tick's time (the hold still ends when the context runs out).
+    /// A hold whose next repeat time is not a number (Delete's touch-down at a NaN time, or a NaN timing) ends at
+    /// once, so `nextTick` is never NaN.
     public mutating func handle(_ event: KeyEvent, at time: Double, in context: TypingContext) -> TypingOutput {
         var output: TypingOutput
         switch event {
@@ -185,6 +193,7 @@ public struct TypingEngine: Sendable {
         case .tick: output = tick(at: time, in: context)
         case .contextChanged: output = contextChanged(context)
         }
+        if let hold = deleteHold, hold.nextRepeat.isNaN { deleteHold = nil }
         output.nextTick = deleteHold?.nextRepeat
         return output
     }
@@ -309,7 +318,7 @@ public struct TypingEngine: Sendable {
                 break
             }
             var deleted = 0
-            if hold.repeatsDone < timings.deleteCharacterRepeats {
+            if hold.repeatsDone < characterRepeats {
                 if end > text.startIndex {
                     end = text.index(before: end)
                     deleted = 1
@@ -411,8 +420,9 @@ public struct TypingEngine: Sendable {
     ///
     /// The last character must be exactly one space, on its own. A space can join the character before it: a
     /// Prepend scalar such as U+0600 followed by a space is one character (Unicode grapheme rule GB9b). Then the
-    /// text does not end with a plain space, there is no full stop, and the one delete that would replace the space
-    /// cannot remove the Prepend scalar with it (KEY-22 review round 2).
+    /// text does not end with a plain space, and the one delete that would replace the space would remove the
+    /// Prepend scalar with it (KEY-22 review round 2). Assumption, not measured: there is then no full stop at all;
+    /// what Apple's keyboard does after a Prepend character and two spaces is not known.
     private func followsAWord(afterTrailingSpace text: String) -> Bool {
         guard text.endIndex > text.startIndex else { return false }
         // `text.index(before:)` from a character boundary gives a character boundary; `endIndex` is one.
@@ -435,8 +445,12 @@ public struct TypingEngine: Sendable {
 
     /// The time from repeat `repeatsDone` to the next one.
     private func repeatInterval(after repeatsDone: Int) -> Double {
-        repeatsDone < timings.deleteCharacterRepeats ? timings.deleteRepeatInterval : timings.deleteWordRepeatInterval
+        repeatsDone < characterRepeats ? timings.deleteRepeatInterval : timings.deleteWordRepeatInterval
     }
+
+    /// `timings.deleteCharacterRepeats`, read as at least 1 here, where it is used, so a value set after `init`
+    /// below 1 behaves as 1 too.
+    private var characterRepeats: Int { max(1, timings.deleteCharacterRepeats) }
 
     /// Moves `end` back over the whitespace before it and the run of non-whitespace before that, a character
     /// (grapheme cluster) at a time, and returns how many characters it moved over. A character counts as

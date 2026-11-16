@@ -162,6 +162,25 @@ struct DeleteTests {
         #expect(output == TypingOutput(deleteCount: 1, nextTick: 7 + timings.deleteInitialDelay))
     }
 
+    @Test(
+        "deleteCharacterRepeats below 1, set after init, is read as 1: one character, then words", arguments: [0, -5])
+    func characterRepeatsBelowOne(value: Int) {
+        var typist = Typist(Field(text: "one two xy"))
+        typist.engine.timings.deleteCharacterRepeats = value
+        #expect(typist.engine.timings.deleteCharacterRepeats == value)
+        let counts = Self.hold(&typist, ticks: 2)
+        #expect(counts == [1, 4])
+        #expect(typist.text == "one ")
+    }
+
+    @Test("A touch-down at a NaN time deletes once and starts no hold, so no tick is NaN")
+    func nanTouchDown() {
+        var typist = Typist(Field(text: "abc"))
+        #expect(typist.press(.deleteDown, at: .nan) == TypingOutput(deleteCount: 1))
+        #expect(typist.press(.tick, at: 1000) == TypingOutput())
+        #expect(typist.text == "ab")
+    }
+
     @Test("A tick with no hold does nothing")
     func tickWithoutHold() {
         var typist = Typist(Field(text: "abc"))

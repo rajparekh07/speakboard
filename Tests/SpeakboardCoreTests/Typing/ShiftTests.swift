@@ -243,19 +243,11 @@ struct ShiftTests {
     }
 
     @Test(
-        "A fresh engine for a new field reads it on its first context change, whatever the old field's Shift",
+        "A fresh engine, as the adapter makes for each field session, reads its field on its first context change",
         arguments: Autocapitalization.allCases)
-    func freshEngineReadsNewField(type: Autocapitalization) {
-        for oldChoice in [KeyEvent.shift, .contextChanged] {
-            // The old field session: the user taps Shift off (or leaves it) at a sentence start, or locks it.
-            var old = Typist(Field(text: "Hi. "))
-            old.press(oldChoice)
-            old.press(.shift, after: timings.shiftDoubleTapWindow / 2)
-
-            // The new field session: a fresh engine, as the adapter makes when the document changes.
-            let new = Typist(Field(autocapitalization: type))
-            #expect(new.shift == (type == .none ? .off : .automatic), "\(type) after \(oldChoice)")
-        }
+    func freshEngineReadsItsField(type: Autocapitalization) {
+        let new = Typist(Field(autocapitalization: type))
+        #expect(new.shift == (type == .none ? .off : .automatic), "\(type)")
     }
 
     @Test("Reusing one engine across fields carries the user's Shift choice over (the adapter must not)")

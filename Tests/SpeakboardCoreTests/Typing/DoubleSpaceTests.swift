@@ -108,6 +108,19 @@ struct DoubleSpaceTests {
         #expect(typist.text == "hi there ")
     }
 
+    @Test("A mark joined to the first space before the second: no full stop, nothing deleted")
+    func markedSpace() {
+        for mark in ["\u{301}", "\u{FE0F}"] {
+            var typist = Typist(Field(text: "hi"))
+            let gap = timings.doubleSpaceWindow / 4
+            typist.press(.space)
+            typist.field.text += mark
+            typist.press(.contextChanged, after: gap)
+            #expect(typist.press(.space, after: gap) == TypingOutput(insertion: " "))
+            #expect(typist.text == "hi " + mark + " ")
+        }
+    }
+
     @Test("Typing with double spaces makes sentences")
     func typing() {
         var typist = Typist()
