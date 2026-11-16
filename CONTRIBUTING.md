@@ -35,10 +35,27 @@ The image is pinned by tag, not by digest. A tag can be re-pushed to point at a 
 * If `docker info` fails after the container's worker restarted, and `/tmp/dockerd.log` says "containerd is still running" for a process that no longer exists before `dockerd` exits, a stale `/var/run/docker/containerd/containerd.pid` is the cause. `make check` removes it, and the sockets beside it, before it starts `dockerd`, but only when no `dockerd` is running and the pid's process does not exist.
 * The image is about 1.3 GB to download. Docker Hub rate-limits anonymous pulls, so `make check` pulls from `mirror.gcr.io/library/swift` first and from Docker Hub only if the mirror fails.
 
+### On a Mac
+
+`make check-native` runs the same steps as `make check` without Docker, with the active Swift toolchain:
+
+```sh
+make check-native
+```
+
+It needs Xcode, and Xcode's toolchain must be the active one. With only the Command Line Tools (their Swift is 6.3.3), the tests fail to compile with `no such module 'Testing'`. Check with `xcode-select -p`, which must print a path inside Xcode, and select Xcode with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` if it does not. The scripts are written for the bash 3.2 at `/bin/bash` and the BSD tools macOS ships, so nothing needs installing from Homebrew.
+
+It first checks that every tool the steps use is there (`swift`, `swift format`, the compiler frontend, a SHA-256 tool, and the rest) and fails, naming the tool, if one is not: a missing tool is a failure, never a skip. On macOS it finds the compiler frontend for the core imports guard with `xcrun -f swift-frontend`, and fails if the Command Line Tools are selected. Then it runs steps 1 and 3 to 8 above, each guard with its self-test, and ends with `make check-native: OK`. Step 2 is not part of it: it looks after the Docker daemon on a Linux host. (Its self-test says it is skipped on a host with no `/proc`, such as macOS.)
+
+On macOS, `swift test` skips the allocation tests, with a message: there is no heap-allocation counter for macOS yet (KEY-8). Expect 105 of 108 tests to pass and 3 to be skipped. They run on Linux, in `make check`.
+
+The other targets take `NATIVE=1` to run on the host too, for example `make NATIVE=1 guard-imports`. `make check-native` also works on Linux with Swift installed, but `make check` in Docker stays the check every ticket must pass.
+
 ### Other targets
 
 | Target | What it does |
 | -- | -- |
+| `make check-native` | Every step but Docker ready, on the host, without Docker. See "On a Mac" |
 | `make guard` | The core guard and its self-test only. Needs no Docker |
 | `make guard-deps` | The core dependency guard and its self-test only |
 | `make guard-imports` | The core imports guard and its self-test only |

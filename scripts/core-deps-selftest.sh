@@ -7,7 +7,7 @@
 # Each failing case must fail with
 # its own message, so a case cannot pass by failing for another reason. Runs on
 # throwaway packages in .build, never on the real Package.swift. Runs inside the
-# Swift image.
+# Swift image, or natively (make check-native).
 set -euo pipefail
 
 guard="$(cd "$(dirname "$0")" && pwd)/core-deps-guard.sh"

@@ -13,7 +13,8 @@
 # It reads the package as SwiftPM evaluates it (`swift package dump-package`),
 # not the text of Package.swift, so how the manifest is written does not hide
 # those settings from it.
-# Runs inside the Swift image (make guard-deps).
+# Runs inside the Swift image (make guard-deps), or natively (make
+# check-native).
 #
 # Usage: scripts/core-deps-guard.sh [package folder]   (default: .)
 set -euo pipefail
