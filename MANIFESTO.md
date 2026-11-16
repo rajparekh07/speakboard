@@ -2,7 +2,7 @@
 
 **The keyboard you would keep even if you never spoke. The dictation you would keep even if you never typed.**
 
-> **Status:** v0.2, accepted by the owner on 16 Nov 2026. v0.2 applies the owner's decision of 15 Nov 2026 that version 1 is English only (ADR-0010). It was edited on 16 Nov 2026 for the owner's decision of that day (ADR-0021): reviewed work reaches `main` through a pull request, which replaces the one-branch rule (ADR-0013). Only the repo skeleton and the letters layout model exist so far. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
+> **Status:** v0.2, accepted by the owner on 16 Nov 2026. v0.2 applies the owner's decision of 15 Nov 2026 that version 1 is English only (ADR-0010). It was edited on 16 Nov 2026 for two decisions the owner made that day: reviewed work reaches `main` through a pull request, which replaces the one-branch rule (ADR-0021, replacing ADR-0013), and the minimum iOS version is 27 (ADR-0007). Only the core's letters layout model and typing engine exist so far, and nothing has run on an iPhone or in the simulator. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
 
 ## Why this exists
 
@@ -68,7 +68,7 @@ Apple publishes no memory limit for keyboard extensions. Developer reports put t
 
 ## What "native" means
 
-**Look.** Key sizes, spacing, radii, type, colours, popups and animation curves are measured from the system keyboard on every device size, in light and dark, and measured again on every iOS release. The iOS 26 Liquid Glass keyboard is the visual target. We draw everything ourselves and use no Apple assets.
+**Look.** Key sizes, spacing, radii, type, colours, popups and animation curves are measured from the system keyboard on every device size, in light and dark, and measured again on every iOS release. The visual target is the system keyboard of iOS 27, the minimum iOS we support (ADR-0007). iOS 26 introduced the Liquid Glass look; whether the iOS 27 keyboard differs from iOS 26's is not yet measured. We draw everything ourselves and use no Apple assets.
 
 **Behaviour.** Apple gives custom keyboards no API for the things users assume are part of the platform. Apple's own list of what we must build ourselves: layout per keyboard type, autocorrection and suggestions, auto-capitalisation, double-space period, caps lock and keycap artwork. To that we add what people use without thinking about it: key popups and long-press accents, the space-bar cursor trackpad, accelerating delete, the return key that changes with the field, and haptics and clicks that match the system's.
 
@@ -132,7 +132,7 @@ These are the owner's calls. Each has a recommended default so work is not block
 
 1. **Local only, or local with optional cloud?** Recommended: version 1 is local only. Revisit only if our evaluation shows on-device recognition cannot reach par.
 2. **Recognition engine.** Recommended: a bake-off between Apple SpeechAnalyzer, Parakeet on Core ML and WhisperKit, on our own evaluation set, on real iPhones, with the engine behind one protocol. Public benchmarks are vendor-run on Macs. They put all three at roughly 2 to 4% word error rate on clean English and disagree on harder audio.
-3. **Minimum iOS version.** Recommended: iOS 26. It gives one visual target, SpeechAnalyzer and Apple's on-device language model.
+3. **Minimum iOS version.** Decided by the owner on 16 Nov 2026: iOS 27 (ADR-0007). It gives one visual target, SpeechAnalyzer and Apple's on-device language model, and it is reported to run on the same iPhones as iOS 26 (iPhone 11 and newer).
 4. **Launch languages.** Decided by the owner on 15 Nov 2026: English only (ADR-0010). Locale stays a parameter, and layouts, lexicons and rules are data per locale, so a later language is an addition.
 5. **Cleanup model.** Recommended: rules plus a small on-device model first, with a cloud model only as an explicit opt-in later.
 6. **Business model.** The only constraint from this document is no ads and no data.
