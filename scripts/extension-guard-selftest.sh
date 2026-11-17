@@ -88,9 +88,15 @@ if [ "${1:-}" = project ]; then
     ext=$(ext_entry "$ext_src" "$ext_dep" "$ext_set")
     kit=$(kit_entry "$kit_src" "$kit_dep" "$kit_set")
     # dump <extension entry> <KeyboardKit entry> <project settings> <packages> [<more top-level members>]
+    #      [<more targets, each starting with a comma>]
+    # The options and schemes come from $options and $schemes, empty unless a case sets them.
+    options='{}'
+    schemes='{}'
     dump() {
-        printf '{"name":"Speakboard","options":{},"schemes":{},"settings":%s,"packages":%s%s,' "$3" "$4" "${5:-}"
-        printf '"targets":{"Speakboard":{"type":"application"},"SpeakboardKeyboard":%s,"KeyboardKit":%s}}' "$1" "$2"
+        printf '{"name":"Speakboard","options":%s,"schemes":%s,"settings":%s,"packages":%s%s,' \
+            "$options" "$schemes" "$3" "$4" "${5:-}"
+        printf '"targets":{"Speakboard":{"type":"application","platform":"iOS"},"SpeakboardKeyboard":%s,"KeyboardKit":%s%s}}' \
+            "$1" "$2" "${6:-}"
     }
     project_case() {
         printf '%s\n' "$4" > "$work/dump.json"
@@ -142,6 +148,40 @@ if [ "${1:-}" = project ]; then
         "$(dump "$(ext_entry "$ext_src" "$ext_dep" '{"base":{"APPLICATION_EXTENSION_API_ONLY":true,"INFOPLIST_FILE":"Apple/Keyboard/Info.plist","PRODUCT_BUNDLE_IDENTIFIER":"$(SPEAKBOARD_BUNDLE_ID).keyboard","CURRENT_PROJECT_VERSION":"1","MARKETING_VERSION":"0.2","PRODUCT_NAME":"SpeakboardKeyboard"}}')" "$kit" "$proj_set" "$packages")"
     project_case fail "no extension target" "project.yml has no targets.SpeakboardKeyboard" \
         '{"name":"Speakboard","settings":{"base":{}},"packages":{"Speakboard":{"path":"."}},"targets":{"KeyboardKit":{}}}'
+    # Multi-platform targets: XcodeGen renames them after the dump the guard reads (KEY-63).
+    project_case fail "a multi-platform target that XcodeGen would rename to SpeakboardKeyboard" \
+        "targets.SpeakboardKeyboar.platform is a list" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"SpeakboardKeyboar":{"type":"app-extension","platform":["iOS"],"platformSuffix":"d","sources":[{"path":"Apple/Other"}]}')"
+    project_case fail "a platformSuffix on its own" "targets.SpeakboardKeyboar.platformSuffix is set" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"SpeakboardKeyboar":{"type":"app-extension","platform":"iOS","platformSuffix":"d"}')"
+    project_case fail "a platformPrefix on the app" "targets.Other.platformPrefix is set" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"Other":{"type":"application","platform":"iOS","platformPrefix":"x"}')"
+    project_case fail "a target name the guard cannot read as a key path" "a target named \"Speakboard.Keyboard\"" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"Speakboard.Keyboard":{"type":"application","platform":"iOS"}')"
+    # Commands at generation, and scheme scripts.
+    options='{"postGenCommand":"echo hi"}'
+    project_case fail "options.postGenCommand" "options.postGenCommand is set" "$(dump "$ext" "$kit" "$proj_set" "$packages")"
+    options='{"preGenCommand":"echo hi"}'
+    project_case fail "options.preGenCommand" "options.preGenCommand is set" "$(dump "$ext" "$kit" "$proj_set" "$packages")"
+    options='{}'
+    schemes='{"Speakboard":{"build":{"targets":{"Speakboard":"all"},"preActions":[{"script":"echo hi"}]}}}'
+    project_case fail "a scheme's build preActions" "scheme preActions or postActions" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages")"
+    schemes='{"Speakboard":{"test":{"targets":["KeyboardKitTests"],"postActions":[{"script":"echo hi"}]}}}'
+    project_case fail "a scheme's test postActions" "scheme preActions or postActions" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages")"
+    schemes='{}'
+    project_case fail "a target's own scheme with preActions" "scheme preActions or postActions" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"Other":{"type":"application","platform":"iOS","scheme":{"preActions":[{"script":"echo hi"}]}}')"
+    project_case pass "a scheme with no actions (as project.yml has)" "" \
+        "$(schemes='{"Speakboard":{"build":{"targets":{"Speakboard":"all"}},"test":{"targets":["KeyboardKitTests"]}}}'; dump "$ext" "$kit" "$proj_set" "$packages")"
+    # XcodeGen itself failing (KEY-63).
+    mkdir -p "$work/failbin" "$work/emptybin"
+    printf '#!/bin/bash\necho "xcodegen: cannot read the spec" >&2\nexit 1\n' > "$work/failbin/xcodegen"
+    printf '#!/bin/bash\nexit 0\n' > "$work/emptybin/xcodegen"
+    chmod +x "$work/failbin/xcodegen" "$work/emptybin/xcodegen"
+    check fail "xcodegen fails" "xcodegen could not read" env PATH="$work/failbin:$PATH" "$guard" project "$work/project.yml"
+    check fail "xcodegen prints nothing" "is not JSON" env PATH="$work/emptybin:$PATH" "$guard" project "$work/project.yml"
     check fail "no project spec" "no project spec" env PATH="$work/bin:$PATH" "$guard" project "$work/missing.yml"
     finish
     exit 0
@@ -213,6 +253,15 @@ mkdir -p "$work/cfile"
 printf 'import UIKit\n' > "$work/cfile/View.swift"
 printf 'int x;\n' > "$work/cfile/x.c"
 check fail "a C file" "x.c is not a Swift file" "$guard" sources "$work/cfile"
+# Hidden files: XcodeGen compiles them too, so the guard does not skip them (KEY-63).
+mkdir -p "$work/hidden"
+printf 'import UIKit\n' > "$work/hidden/View.swift"
+printf '@import Network;\n' > "$work/hidden/.Net.m"
+check fail "a hidden Objective-C file" ".Net.m is not a Swift file" "$guard" sources "$work/hidden"
+mkdir -p "$work/dsstore"
+printf 'import UIKit\n' > "$work/dsstore/View.swift"
+printf 'int x;\n' > "$work/dsstore/x.DS_Store"
+check fail "a file whose name only ends in .DS_Store" "x.DS_Store is not a Swift file" "$guard" sources "$work/dsstore"
 mkdir -p "$work/plist"
 printf 'import UIKit\n' > "$work/plist/View.swift"
 printf '<plist/>\n' > "$work/plist/Info.plist"

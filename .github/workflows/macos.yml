@@ -5,8 +5,9 @@
 # (ADR-0006), builds the app and the keyboard extension for the simulator,
 # checks that project.yml builds the extension and KeyboardKit exactly as the
 # extension guard expects (their whole target entries, with no build tool
-# plugin or script phase, known project-wide settings, and the core from this
-# repo) and that the built extension loads no SwiftUI and no networking
+# plugin or script phase, known project-wide settings, the core from this repo,
+# no multi-platform target, and no generation command or scheme action) and
+# that the built extension loads no SwiftUI and no networking
 # framework (what these checks cannot see is in scripts/extension-guard.sh),
 # runs the unit tests, and takes screenshots of our keyboard in the simulator.
 name: macos
@@ -86,7 +87,7 @@ jobs:
           git status --porcelain --untracked-files=all | tee "$OUT/git-status.txt"
           [ ! -s "$OUT/git-status.txt" ] || { echo "generation left files git would see" >&2; exit 1; }
 
-      - name: The extension guard scans exactly the extension's sources
+      - name: The extension guard checks the project (targets, multi-platform, generation and scheme scripts)
         run: |
           scripts/extension-guard-selftest.sh project
           scripts/extension-guard.sh project project.yml
