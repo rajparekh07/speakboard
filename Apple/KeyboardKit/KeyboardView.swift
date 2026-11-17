@@ -101,7 +101,14 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
     }
 
     private func syncAppearance() {
-        let current: Appearance = traitCollection.userInterfaceStyle == .dark ? .dark : .light
+        applyUserInterfaceStyle(traitCollection.userInterfaceStyle)
+    }
+
+    /// Draws in the appearance of `style`: dark for `.dark`, light otherwise. The view calls it with its trait
+    /// collection's style on every layout pass and whenever the style changes; tests call it directly, because a view
+    /// with no window does not take a trait override into its trait collection.
+    public func applyUserInterfaceStyle(_ style: UIUserInterfaceStyle) {
+        let current: Appearance = style == .dark ? .dark : .light
         if current != appearance || faceLayers.isEmpty {
             appearance = current
             glyphCache.removeAll()

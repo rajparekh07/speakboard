@@ -234,6 +234,13 @@ struct KeyboardDrawingTests {
         ).cgColor
     }
 
+    /// Whether two frames are equal up to Core Animation's rounding: a layer keeps its position and bounds, and
+    /// computes its frame from them, so a frame read back can differ from the one set in the last bits.
+    static func same(_ a: CGRect, _ b: CGRect) -> Bool {
+        abs(a.minX - b.minX) < 1e-9 && abs(a.minY - b.minY) < 1e-9 && abs(a.width - b.width) < 1e-9
+            && abs(a.height - b.height) < 1e-9
+    }
+
     static func check(_ rig: Rig, _ appearance: Appearance) {
         let palette = Palette.of(appearance)
         #expect(rig.view.appearance == appearance)
@@ -242,8 +249,8 @@ struct KeyboardDrawingTests {
         for (index, key) in rig.layout.keys.enumerated() {
             let face = rig.view.faceLayers[index]
             let style = KeyStyle.of(key.kind, returnKey: .standard, appearance: appearance, metrics: rig.layout.metrics)
-            #expect(
-                face.frame == CGRect(x: key.frame.x, y: key.frame.y, width: key.frame.width, height: key.frame.height))
+            let frame = CGRect(x: key.frame.x, y: key.frame.y, width: key.frame.width, height: key.frame.height)
+            #expect(same(face.frame, frame), "\(key.kind): \(face.frame) is not \(frame)")
             #expect(face.backgroundColor == expectedColor(style.fill), "\(key.kind) \(appearance)")
             #expect(face.cornerRadius == CGFloat(style.cornerRadius.value))
             #expect(face.shadowOffset.height == CGFloat(style.shadow.offsetY.value))
@@ -254,14 +261,12 @@ struct KeyboardDrawingTests {
     @Test("Each key's layer has the core's frame and the tokens' fill, radius and shadow, in light and in dark")
     func layers() throws {
         let rig = try Rig()
-        rig.view.overrideUserInterfaceStyle = .light
-        rig.view.setNeedsLayout()
-        rig.view.layoutIfNeeded()
+        rig.view.applyUserInterfaceStyle(.light)
         Self.check(rig, .light)
-        rig.view.overrideUserInterfaceStyle = .dark
-        rig.view.setNeedsLayout()
-        rig.view.layoutIfNeeded()
+        rig.view.applyUserInterfaceStyle(.dark)
         Self.check(rig, .dark)
+        rig.view.applyUserInterfaceStyle(.light)
+        Self.check(rig, .light)
     }
 
     @Test("A held function key shows its pressed fill; a held letter shows no pressed face (the export has none)")
