@@ -11,6 +11,16 @@ import XCTest
 /// The view's accessibility identifier: KeyboardView.accessibilityID (KeyboardKit is not linked into this target).
 let keyboardID = "SpeakboardKeyboard"
 
+/// When the running test began, for the elapsed time in each `speakboard-ui` line.
+@MainActor var testStart = Date()
+
+/// Prints a line the script copies into the job log, with the seconds since the test began, so a slow run shows
+/// where its time went (KEY-62 review round 2).
+@MainActor
+func say(_ message: String) {
+    print("speakboard-ui: +\(String(format: "%.1f", Date().timeIntervalSince(testStart)))s \(message)")
+}
+
 /// Where Speakboard's keyboard is on screen, and how to tap one of its keys. It is found by its view's accessibility
 /// identifier, or the test fails: a proof that our keyboard typed cannot tap a keyboard it has not found (on 9ce7fbf a
 /// fallback to `app.keyboards` typed on Apple's keyboard).
@@ -26,7 +36,7 @@ struct KeyboardOnScreen {
         let view = app.descendants(matching: .any)[keyboardID]
         XCTAssertTrue(view.waitForExistence(timeout: 10), "Speakboard's keyboard view is not on screen")
         origin = view.frame.origin
-        print("speakboard-ui: keyboard found by its accessibility identifier, frame \(view.frame)")
+        say("keyboard found by its accessibility identifier, frame \(view.frame)")
     }
 
     func coordinate(_ kind: KeyKind) throws -> XCUICoordinate {
@@ -61,11 +71,11 @@ func bringUpSpeakboard(_ app: XCUIApplication) {
     let ours = app.descendants(matching: .any)[keyboardID]
     for attempt in 0..<6 {
         if ours.waitForExistence(timeout: 5) {
-            print("speakboard-ui: attempt \(attempt): Speakboard is up")
+            say("attempt \(attempt): Speakboard is up")
             return
         }
         let appleKeys = app.keys.count
-        print("speakboard-ui: attempt \(attempt): Speakboard not found; \(appleKeys) of Apple's key elements")
+        say("attempt \(attempt): Speakboard not found; \(appleKeys) of Apple's key elements")
         guard appleKeys > 0 else {
             // No keyboard yet, or one without key elements that is not ours: wait, do not cycle blind.
             continue
@@ -76,7 +86,7 @@ func bringUpSpeakboard(_ app: XCUIApplication) {
             springboard.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'next keyboard'")).firstMatch,
         ]
         guard let next = candidates.first(where: { $0.exists }) else {
-            print("speakboard-ui: no next-keyboard button found")
+            say("no next-keyboard button found")
             break
         }
         next.tap()
@@ -95,6 +105,7 @@ final class KeyboardExtensionUITests: XCTestCase {
 
     @MainActor
     func screenshot(_ name: String) {
+        defer { say("screenshot \(name) taken") }
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "\(name)-\(appearance)"
         attachment.lifetime = .keepAlways
@@ -106,7 +117,7 @@ final class KeyboardExtensionUITests: XCTestCase {
         let predicate = NSPredicate(format: "value == %@", expected)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: field)
         let result = XCTWaiter().wait(for: [expectation], timeout: 10)
-        print("speakboard-ui: \(what): the field reads \(String(describing: field.value))")
+        say("\(what): the field reads \(String(describing: field.value))")
         XCTAssertEqual(
             result, .completed, "\(what): the field reads \(String(describing: field.value)), not \(expected)")
     }
@@ -117,16 +128,20 @@ final class KeyboardExtensionUITests: XCTestCase {
     /// Shift, checked by typing "ab" as "AB" and deleting it.
     @MainActor
     func testTypesThroughTheExtension() throws {
+        testStart = Date()
+        say("test began")
         let app = XCUIApplication()
         app.launchArguments = ["-SpeakboardFocusField"]
         app.launch()
+        say("app launched")
         let field = app.textFields["TryField"]
         XCTAssertTrue(field.waitForExistence(timeout: 20), "the app's field")
+        say("field found")
         let window = app.windows.firstMatch.frame
         let match = DeviceClass.match(screenWidth: Double(window.width), screenHeight: Double(window.height))
         let layout = try XCTUnwrap(
             KeyboardLayout(locale: .english, deviceClass: match.deviceClass, orientation: .portrait))
-        print("speakboard-ui: device \(match.deviceClass.rawValue); window \(window)")
+        say("device \(match.deviceClass.rawValue); window \(window)")
         bringUpSpeakboard(app)
         let keyboard = try KeyboardOnScreen(app: app, layout: layout)
         screenshot("shift-auto")

@@ -12,6 +12,7 @@ final class KeyboardViewController: UIInputViewController {
     // height and Full Access. It carries no text the user typed.
     private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "SpeakboardKeyboard", category: "keyboard")
     private var lastLoggedState = ""
+    private var loggedFirstTextChange = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -45,6 +46,7 @@ final class KeyboardViewController: UIInputViewController {
         typing?.beginFieldSession(at: ProcessInfo.processInfo.systemUptime)
         let document = typing?.field.documentIdentifier == nil ? "none" : "present"
         log.notice("speakboard-session appeared document=\(document, privacy: .public)")
+        loggedFirstTextChange = false
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -56,6 +58,15 @@ final class KeyboardViewController: UIInputViewController {
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         typing?.textDidChange(at: ProcessInfo.processInfo.systemUptime)
+        // Once per appearance: whether the proxy gives a document identifier by the first text change, so CI shows
+        // whether it ever does. A switch to another field with the keyboard still up is a new field session only if
+        // the identifier changes; with no identifier it is a context change, and the user's Shift carries over.
+        // That case is unverified (KEY-62 review round 2).
+        if !loggedFirstTextChange {
+            loggedFirstTextChange = true
+            let document = typing?.field.documentIdentifier == nil ? "none" : "present"
+            log.notice("speakboard-session first-text-change document=\(document, privacy: .public)")
+        }
     }
 
     // The cursor moving is a context change too (the engine reads the text before it). Sending one more is safe:

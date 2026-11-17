@@ -47,8 +47,15 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
     public private(set) var faceLayers: [CALayer] = []
     private var labelLayers: [CATextLayer] = []
     private var glyphLayers: [CALayer] = []
+    /// The symbol name on each glyph key, for `glyphName(at:)`.
     private var drawnGlyphs: [String?] = []
+    /// The image each glyph layer holds. A layer's contents are replaced whenever the image to draw is another object,
+    /// so a new appearance, colour or scale always reaches the layer: the name alone does not change with them
+    /// (KEY-62 review round 2).
+    private var drawnImages: [UIImage?] = []
+    /// Rendered glyphs, by symbol name and colour, at `glyphScale`. Cleared on an appearance or display scale change.
     private var glyphCache: [String: UIImage] = [:]
+    private var glyphScale: CGFloat?
     private let labels: KeyLabels?
     private var inputModeTouch: Int?
 
@@ -124,6 +131,7 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
         labelLayers.removeAll()
         glyphLayers.removeAll()
         drawnGlyphs.removeAll()
+        drawnImages.removeAll()
         glyphCache.removeAll()
         if let layout {
             var index = 0
@@ -139,6 +147,7 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
                 labelLayers.append(label)
                 glyphLayers.append(glyph)
                 drawnGlyphs.append(nil)
+                drawnImages.append(nil)
                 index += 1
             }
         }
@@ -163,6 +172,10 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
         let shift = typing?.shiftState ?? .off
         let face = returnFace
         let scale = traitCollection.displayScale
+        if scale != glyphScale {
+            glyphCache.removeAll()
+            glyphScale = scale
+        }
         var index = 0
         while index < layout.keys.count {
             let key = layout.keys[index]
@@ -204,14 +217,16 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
                 x: 0, y: (bounds.height - uiFont.lineHeight) / 2, width: bounds.width, height: uiFont.lineHeight)
             glyphLayer.isHidden = true
             drawnGlyphs[index] = nil
+            drawnImages[index] = nil
         } else if let name = Self.glyphName(for: key.kind, shift: shift),
             let image = glyph(name, size: size, color: style.label.color)
         {
             glyphLayer.isHidden = false
-            if drawnGlyphs[index] != name {
+            if drawnImages[index] !== image {
                 glyphLayer.contents = image.cgImage
-                drawnGlyphs[index] = name
+                drawnImages[index] = image
             }
+            drawnGlyphs[index] = name
             glyphLayer.contentsScale = image.scale
             glyphLayer.frame = CGRect(
                 x: (bounds.width - image.size.width) / 2, y: (bounds.height - image.size.height) / 2,
@@ -254,7 +269,8 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
     }
 
     private func glyph(_ name: String, size: CGFloat, color: ColorCell) -> UIImage? {
-        if let cached = glyphCache[name] { return cached }
+        let cacheKey = "\(name) \(color.color.rgba)"
+        if let cached = glyphCache[cacheKey] { return cached }
         let configuration = UIImage.SymbolConfiguration(pointSize: size)
         guard
             let symbol = UIImage(systemName: name, withConfiguration: configuration)?
@@ -264,7 +280,7 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
         let image = UIGraphicsImageRenderer(size: symbol.size, format: format).image { _ in
             symbol.draw(at: .zero)
         }
-        glyphCache[name] = image
+        glyphCache[cacheKey] = image
         return image
     }
 
@@ -272,6 +288,15 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
     public func labelText(at index: Int) -> String? {
         guard index < labelLayers.count, !labelLayers[index].isHidden else { return nil }
         return labelLayers[index].string as? String
+    }
+
+    /// The image in key `index`'s glyph layer, or nil if it shows no glyph. For tests: they read its pixels. It is the
+    /// layer's own `contents`, returned only if that is the very image object last rendered for the key.
+    public func glyphImage(at index: Int) -> CGImage? {
+        guard index < glyphLayers.count, !glyphLayers[index].isHidden, let contents = glyphLayers[index].contents,
+            let image = drawnImages[index]?.cgImage, (contents as AnyObject) === image
+        else { return nil }
+        return image
     }
 
     /// The SF Symbol drawn on key `index`, or nil. For tests.

@@ -301,6 +301,69 @@ struct KeyboardDrawingTests {
         Self.check(rig, .light)
     }
 
+    /// The colour of the most opaque pixel of `image`, un-premultiplied, from 0 to 1, or nil if it has no opaque
+    /// pixel. Read from the image's own pixels, not from what the view says it drew.
+    static func inkColor(_ image: CGImage) -> (red: Double, green: Double, blue: Double)? {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0, let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard
+                let context = CGContext(
+                    data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                    bytesPerRow: width * 4, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return nil }
+        var best = 0
+        var bestAlpha: UInt8 = 0
+        for index in stride(from: 0, to: pixels.count, by: 4) where pixels[index + 3] > bestAlpha {
+            bestAlpha = pixels[index + 3]
+            best = index
+        }
+        guard bestAlpha > 200 else { return nil }
+        let alpha = Double(bestAlpha)
+        return (Double(pixels[best]) / alpha, Double(pixels[best + 1]) / alpha, Double(pixels[best + 2]) / alpha)
+    }
+
+    /// Checks every glyph key's layer holds an image whose ink is `key.label` in `appearance`, and returns the images.
+    static func checkGlyphs(_ rig: Rig, _ appearance: Appearance, _ indices: [Int]) -> [CGImage?] {
+        let label = Palette.of(appearance).keyLabel.color
+        return indices.map { index in
+            let image = rig.view.glyphImage(at: index)
+            #expect(image != nil, "key \(index) shows its glyph image in \(appearance)")
+            if let image, let ink = inkColor(image) {
+                #expect(
+                    abs(ink.red - label.red) < 0.1, "key \(index) in \(appearance): red \(ink.red), not \(label.red)")
+                #expect(abs(ink.green - label.green) < 0.1, "key \(index) in \(appearance)")
+                #expect(abs(ink.blue - label.blue) < 0.1, "key \(index) in \(appearance)")
+            } else {
+                Issue.record("key \(index) in \(appearance): no opaque pixel in its glyph image")
+            }
+            return image
+        }
+    }
+
+    @Test("Glyphs are redrawn in the new label colour when the appearance changes, light, dark and light again")
+    func glyphsFollowTheAppearance() throws {
+        // The layers are first drawn in light (as the extension may, before its trait callback says dark), then the
+        // appearance changes with the keyboard up, as `simctl ui appearance dark` does in sim-keyboard.sh.
+        let rig = try Rig(autocapitalization: .none)
+        let indices = try [KeyKind.shift, .delete, .emoji].map { try rig.index(of: $0) }
+        rig.view.applyUserInterfaceStyle(.light)
+        let light = Self.checkGlyphs(rig, .light, indices)
+        rig.view.applyUserInterfaceStyle(.dark)
+        let dark = Self.checkGlyphs(rig, .dark, indices)
+        for (before, after) in zip(light, dark) {
+            #expect(before !== after, "the glyph layer's contents changed with the appearance")
+        }
+        rig.view.applyUserInterfaceStyle(.light)
+        _ = Self.checkGlyphs(rig, .light, indices)
+    }
+
     @Test("A held function key shows its pressed fill; a held letter shows no pressed face (the export has none)")
     func pressed() throws {
         let rig = try Rig(autocapitalization: .none)

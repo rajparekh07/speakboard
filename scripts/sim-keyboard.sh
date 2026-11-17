@@ -161,7 +161,7 @@ if [ -z "$line" ]; then
     exit 1
 fi
 echo "sim-keyboard: the extension reported: $line"
-grep -o 'speakboard-session .*' "$out/keyboard.log" | tail -1 || true
+grep -o 'speakboard-session .*' "$out/keyboard.log" || true
 case "$line" in
     *fullAccess=true*) ;;
     *)
@@ -182,12 +182,18 @@ if [ -n "$derived" ]; then
     xcrun simctl terminate "$udid" "$app_id" > /dev/null 2>&1 || true
     for appearance in light dark; do
         xcrun simctl ui "$udid" appearance "$appearance"
-        echo "sim-keyboard: UI tests in $appearance appearance"
+        echo "sim-keyboard: UI tests in $appearance appearance: xcodebuild starts at $(date '+%H:%M:%S')"
+        ui_start=$(date '+%Y-%m-%d %H:%M:%S')
         status=0
         TEST_RUNNER_SPEAKBOARD_APPEARANCE="$appearance" xcodebuild -project Speakboard.xcodeproj \
             -scheme SpeakboardUITests -destination "id=$udid" -derivedDataPath "$derived" \
             -resultBundlePath "$out/ui-$appearance.xcresult" test > "$out/ui-$appearance.log" 2>&1 || status=$?
-        grep -E 'speakboard-ui:|error:|Test Case .*(passed|failed)|TEST (SUCCEEDED|FAILED)' "$out/ui-$appearance.log" || true
+        echo "sim-keyboard: UI tests in $appearance appearance: xcodebuild ended at $(date '+%H:%M:%S')"
+        grep -E 'speakboard-ui:|error:|Test Case .*(started|passed|failed)|TEST (SUCCEEDED|FAILED)' \
+            "$out/ui-$appearance.log" || true
+        # The extension's own session lines during these tests: whether the proxy gave a document identifier.
+        xcrun simctl spawn "$udid" log show --style compact --start "$ui_start" \
+            --predicate "subsystem == \"$ext_id\"" 2> /dev/null | grep -o 'speakboard-session .*' || true
         xcrun xcresulttool export attachments --path "$out/ui-$appearance.xcresult" \
             --output-path "$out/ui-$appearance" > /dev/null 2>&1 || echo "sim-keyboard: could not export the screenshots"
         if [ "$status" -ne 0 ]; then
