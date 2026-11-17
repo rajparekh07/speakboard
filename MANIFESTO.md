@@ -2,7 +2,7 @@
 
 **The keyboard you would keep even if you never spoke. The dictation you would keep even if you never typed.**
 
-> **Status:** v0.2, accepted by the owner on 16 Nov 2026. v0.2 applies the owner's decision of 15 Nov 2026 that version 1 is English only (ADR-0010). It was edited on 16 Nov 2026 for two decisions the owner made that day: reviewed work reaches `main` through a pull request, which replaces the one-branch rule (ADR-0021, replacing ADR-0013), and the minimum iOS version is 27 (ADR-0007). What exists so far: the core's letters layout model and typing engine, and a placeholder app and keyboard extension that run in the simulator. The keyboard draws no keys yet, and nothing has run on an iPhone. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
+> **Status:** v0.2, accepted by the owner on 16 Nov 2026. v0.2 applies the owner's decision of 15 Nov 2026 that version 1 is English only (ADR-0010). It was edited on 16 Nov 2026 for two decisions the owner made that day: reviewed work reaches `main` through a pull request, which replaces the one-branch rule (ADR-0021, replacing ADR-0013), and the minimum iOS version is 27 (ADR-0007). What exists so far: the core's letters layout model and typing engine, and an app and a keyboard extension that run in the simulator, where the keyboard draws the English letters layout from the design tokens and types. Its sizes and colours are estimates, no person has yet looked at the drawn keyboard or compared it with Apple's (KEY-64), and nothing has run on an iPhone. Every number in this document is a target we commit to before measuring, not a result. Platform facts are sourced at the end.
 
 ## Why this exists
 
