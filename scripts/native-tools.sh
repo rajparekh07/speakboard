@@ -65,7 +65,13 @@ require_pinned() {
     active=$(swift_version "$output")
     line=$(printf '%s\n' "$output" | grep -m 1 'Swift version' || true)
     if [ "$active" != "$pinned" ]; then
-        echo "native tools: FAIL: $what is ${active:+Swift $active}${active:-not a plain Swift version} (${line:-no version line}), but the Makefile pins $pinned." >&2
+        local found
+        if [ -n "$active" ]; then
+            found="Swift $active"
+        else
+            found="not a plain Swift version"
+        fi
+        echo "native tools: FAIL: $what is $found (${line:-no version line}), but the Makefile pins $pinned." >&2
         echo "Several of the guards' facts were checked with the pinned version. Select a toolchain with Swift $pinned," >&2
         echo "or change the pin, which is in one place: SWIFT_TAG in the Makefile, in its own commit." >&2
         exit 1

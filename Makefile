@@ -8,9 +8,15 @@
 #
 # Keep this file to GNU make 3.81, the make macOS ships.
 #
-# Every variable a check step uses is declared `override`, so a value given on
-# the command line (make check RUN= ..., SWIFT_TAG=..., CHECK_STEPS=...) is
-# ignored and cannot route make check around the pinned image or its steps.
+# What this file defends, and what it does not. The variables the check steps
+# read are declared `override`, and the repo is mounted by the shell's own
+# working directory rather than make's CURDIR, so a value given for any of them
+# on the command line, in the environment or through MAKEFLAGS (make check
+# RUN=, SWIFT_TAG=..., CHECK_STEPS=, CURDIR=...) is ignored; and make check
+# refuses NATIVE=1. Make's own flags (-i, -k, -o, -n, -t), make's own
+# variables (SHELL=, MAKE=) and edits to this file are not defended: with
+# them, "make check: OK" can print for a check that did not run. CI, which runs
+# this file unmodified, is the authority for a green check.
 
 # The Swift image, pinned to an exact Swift version and Ubuntu release.
 override SWIFT_TAG := 6.4.2-resolute
@@ -21,7 +27,8 @@ override SWIFT_VERSION := $(firstword $(subst -, ,$(SWIFT_TAG)))
 
 # Runs a command in the Swift image with the repo mounted at /work, as the
 # calling user, so files in .build are not owned by root.
-override SWIFT_RUN := docker run --rm -v "$(CURDIR)":/work -w /work \
+# "$$(pwd)", not $(CURDIR): CURDIR can be set on the command line.
+override SWIFT_RUN := docker run --rm -v "$$(pwd)":/work -w /work \
 	--user "$$(id -u):$$(id -g)" -e HOME=/tmp $(SWIFT_IMAGE)
 
 # NATIVE=1 runs each step on the host, with no Docker: nothing depends on
