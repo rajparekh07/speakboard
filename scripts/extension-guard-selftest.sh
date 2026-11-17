@@ -158,6 +158,11 @@ if [ "${1:-}" = project ]; then
         "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"Other":{"type":"application","platform":"iOS","platformPrefix":"x"}')"
     project_case fail "a target name the guard cannot read as a key path" "a target named \"Speakboard.Keyboard\"" \
         "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"Speakboard.Keyboard":{"type":"application","platform":"iOS"}')"
+    # Target names are read whole, never word-split or globbed (KEY-63).
+    project_case fail "a target name with a space" "a target named \"Speakboard Keyboar\"" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"Speakboard Keyboar":{"type":"app-extension","platform":["iOS"],"platformSuffix":"d"}')"
+    project_case fail "a target named *" "a target named \"*\"" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages" "" ',"*":{"type":"app-extension","platform":["iOS"]}')"
     # Commands at generation, and scheme scripts.
     options='{"postGenCommand":"echo hi"}'
     project_case fail "options.postGenCommand" "options.postGenCommand is set" "$(dump "$ext" "$kit" "$proj_set" "$packages")"
