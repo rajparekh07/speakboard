@@ -43,10 +43,45 @@ frontend() {
     printf '%s\n' "$path"
 }
 
+# Prints the Swift version a `--version` output names, or nothing if it names
+# none or is ambiguous. "Swift version 6.4.2 (swift-6.4.2-RELEASE)" on Linux and
+# "Apple Swift version 6.4.2 (swiftlang-...)" on macOS give 6.4.2. The number
+# must be followed by a space or the end of the line, so 6.4.2-dev, 6.4.2+asserts
+# and 6.4.2abc give nothing, and a line naming "Swift version" twice gives
+# nothing rather than the last one.
+swift_version() {
+    local line
+    line=$(printf '%s\n' "$1" | grep -m 1 'Swift version') || return 0
+    if [ "$(printf '%s\n' "$line" | grep -o 'Swift version' | wc -l | tr -d ' ')" != 1 ]; then
+        return 0
+    fi
+    printf '%s\n' "$line" | sed -n 's/.*Swift version \([0-9][0-9.]*\)\( .*\)\{0,1\}$/\1/p'
+}
+
+# Fails unless the version in the --version output $2 of $1 (a name, for the
+# message) is the pinned $3.
+require_pinned() {
+    local what="$1" output="$2" pinned="$3" active line
+    active=$(swift_version "$output")
+    line=$(printf '%s\n' "$output" | grep -m 1 'Swift version' || true)
+    if [ "$active" != "$pinned" ]; then
+        local found
+        if [ -n "$active" ]; then
+            found="Swift $active"
+        else
+            found="not a plain Swift version"
+        fi
+        echo "native tools: FAIL: $what is $found (${line:-no version line}), but the Makefile pins $pinned." >&2
+        echo "Several of the guards' facts were checked with the pinned version. Select a toolchain with Swift $pinned," >&2
+        echo "or change the pin, which is in one place: SWIFT_TAG in the Makefile, in its own commit." >&2
+        exit 1
+    fi
+}
+
 check() {
-    local pinned="$1" tool developer version active path
+    local pinned="$1" tool developer path
     # What the scripts make check-native runs call, besides bash's builtins.
-    for tool in swift grep find sort sed mktemp cut diff head tr cat env uname; do
+    for tool in swift grep find sort sed mktemp cut diff head tr cat env uname od wc; do
         command -v "$tool" > /dev/null 2>&1 || fail "\`$tool\` is not available"
     done
     if ! command -v sha256sum > /dev/null 2>&1 && ! command -v shasum > /dev/null 2>&1; then
@@ -67,18 +102,12 @@ check() {
                 ;;
         esac
     fi
-    version=$(swift --version 2>&1 | grep -m 1 'Swift version') || fail "\`swift --version\` names no Swift version"
-    # "Swift version 6.4.2 (swift-6.4.2-RELEASE)" on Linux, "Apple Swift version 6.4.2 (swiftlang-...)" on macOS.
-    active=$(printf '%s\n' "$version" | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p')
-    if [ "$active" != "$pinned" ]; then
-        echo "native tools: FAIL: the active Swift is ${active:-unknown} ($version), but the Makefile pins $pinned." >&2
-        echo "Several of the guards' facts were checked with the pinned version. Select a toolchain with Swift $pinned," >&2
-        echo "or change the pin, which is in one place: SWIFT_TAG in the Makefile, in its own commit." >&2
-        exit 1
-    fi
+    require_pinned "the active Swift" "$(swift --version 2>&1 || true)" "$pinned"
     swift format --version > /dev/null 2>&1 || fail "\`swift format\` is not available"
     path=$(frontend) || exit 1
-    echo "native tools: OK (bash $BASH_VERSION; Swift $active, as pinned; frontend $path)"
+    # The core imports guard runs this frontend, which xcrun can find in another toolchain than `swift`'s.
+    require_pinned "the compiler frontend ($path)" "$("$path" --version 2>&1 || true)" "$pinned"
+    echo "native tools: OK (bash $BASH_VERSION; Swift $pinned, as pinned, for swift and the frontend; frontend $path)"
 }
 
 case "${1:-}" in

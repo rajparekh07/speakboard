@@ -151,6 +151,11 @@ mkdir -p "$work/two/Area"
 printf 'import Dispatch\n' > "$work/two/Area/A.swift"
 printf 'import Foundation\n' > "$work/two/Area/B.swift"
 check fail "two files, the first importing Dispatch" "A.swift imports Dispatch" "$guard" "$work/two"
+# The mirror: B.swift sorts last and imports Dispatch, so a guard that reads only the first file fails here.
+mkdir -p "$work/two-last/Area"
+printf 'import Foundation\n' > "$work/two-last/Area/A.swift"
+printf 'import Dispatch\n' > "$work/two-last/Area/B.swift"
+check fail "two files, the last importing Dispatch" "B.swift imports Dispatch" "$guard" "$work/two-last"
 
 # Fail closed.
 mkdir -p "$work/empty" "$work/good/Area"

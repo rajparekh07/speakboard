@@ -1,0 +1,119 @@
+# The Xcode project, generated with XcodeGen (ADR-0006). Run `xcodegen generate`
+# at the repo root; it writes Speakboard.xcodeproj, which is never committed.
+#
+# Targets:
+#   Speakboard        the containing app: SwiftUI (ADR-0012)
+#   SpeakboardKeyboard the keyboard extension: UIKit and Core Animation only,
+#                      no SwiftUI, no networking code (ADR-0012, MANIFESTO.md)
+#   KeyboardKit       UIKit code linked into the extension (and the app's
+#                      harness): the only target in the app or the extension
+#                      that imports the core (KeyboardKitTests imports it too)
+#   KeyboardKitTests  unit tests for KeyboardKit, run in the simulator
+#
+# The core (Sources/SpeakboardCore) comes in as the local Swift package at the
+# repo root, so Xcode builds the same sources `make check` does (ADR-0005).
+name: Speakboard
+
+options:
+  deploymentTarget:
+    iOS: "27.0" # ADR-0007
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+
+settings:
+  base:
+    # The bundle identifiers, in this one place. PLACEHOLDERS: the owner has no
+    # Apple Developer account yet, and chooses the real ones. The extension's
+    # identifier must start with the app's, so both derive from this value.
+    SPEAKBOARD_BUNDLE_ID: dev.speakboard.placeholder
+    SWIFT_VERSION: "6.0"
+    # Simulator builds need no signing. No team is set until there is an account.
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1" # iPhone: the token export has iPhone sizes only
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+packages:
+  Speakboard:
+    path: .
+
+targets:
+  Speakboard:
+    type: application
+    platform: iOS
+    sources:
+      - path: Apple/App
+    dependencies:
+      - target: SpeakboardKeyboard
+        embed: true
+        codeSign: false
+      - target: KeyboardKit
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SPEAKBOARD_BUNDLE_ID)
+        PRODUCT_NAME: Speakboard
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Speakboard
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+
+  SpeakboardKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Apple/Keyboard
+        excludes:
+          - Info.plist
+    dependencies:
+      - target: KeyboardKit
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SPEAKBOARD_BUNDLE_ID).keyboard
+        PRODUCT_NAME: SpeakboardKeyboard
+        INFOPLIST_FILE: Apple/Keyboard/Info.plist
+        APPLICATION_EXTENSION_API_ONLY: YES
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+
+  KeyboardKit:
+    # Static, so the app and the extension each link their own copy into their
+    # own process, and the core is linked once into each binary.
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: Apple/KeyboardKit
+    dependencies:
+      - package: Speakboard
+        product: SpeakboardCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SPEAKBOARD_BUNDLE_ID).KeyboardKit
+        GENERATE_INFOPLIST_FILE: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+  KeyboardKitTests:
+    # No host app: the tests exercise KeyboardKit's views and its use of the
+    # core directly, so the app's copy of KeyboardKit is not loaded twice.
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Apple/KeyboardKitTests
+    dependencies:
+      - target: KeyboardKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SPEAKBOARD_BUNDLE_ID).KeyboardKitTests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Speakboard:
+    build:
+      targets:
+        Speakboard: all
+        SpeakboardKeyboard: all
+    test:
+      targets:
+        - KeyboardKitTests

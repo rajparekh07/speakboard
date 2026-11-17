@@ -7,17 +7,28 @@
 # list of steps (CHECK_STEPS) and one recipe per step.
 #
 # Keep this file to GNU make 3.81, the make macOS ships.
+#
+# What this file defends, and what it does not. The variables the check steps
+# read are declared `override`, and the repo is mounted by the shell's own
+# working directory rather than make's CURDIR, so a value given for any of them
+# on the command line, in the environment or through MAKEFLAGS (make check
+# RUN=, SWIFT_TAG=..., CHECK_STEPS=, CURDIR=...) is ignored; and make check
+# refuses NATIVE=1. Make's own flags (-i, -k, -o, -n, -t), make's own
+# variables (SHELL=, MAKE=) and edits to this file are not defended: with
+# them, "make check: OK" can print for a check that did not run. CI, which runs
+# this file unmodified, is the authority for a green check.
 
 # The Swift image, pinned to an exact Swift version and Ubuntu release.
-SWIFT_TAG := 6.4.2-resolute
-SWIFT_IMAGE := swift:$(SWIFT_TAG)
+override SWIFT_TAG := 6.4.2-resolute
+override SWIFT_IMAGE := swift:$(SWIFT_TAG)
 # The Swift version alone (6.4.2), which make check-native requires of the
 # active toolchain.
-SWIFT_VERSION := $(firstword $(subst -, ,$(SWIFT_TAG)))
+override SWIFT_VERSION := $(firstword $(subst -, ,$(SWIFT_TAG)))
 
 # Runs a command in the Swift image with the repo mounted at /work, as the
 # calling user, so files in .build are not owned by root.
-SWIFT_RUN := docker run --rm -v "$(CURDIR)":/work -w /work \
+# "$$(pwd)", not $(CURDIR): CURDIR can be set on the command line.
+override SWIFT_RUN := docker run --rm -v "$$(pwd)":/work -w /work \
 	--user "$$(id -u):$$(id -g)" -e HOME=/tmp $(SWIFT_IMAGE)
 
 # NATIVE=1 runs each step on the host, with no Docker: nothing depends on
@@ -31,27 +42,29 @@ ifeq ($(NATIVE),1)
 ifneq ($(filter check,$(if $(MAKECMDGOALS),$(MAKECMDGOALS),check)),)
 $(error make check runs only in the pinned Swift image, and NATIVE=1 is set (on the command line or in the environment). Run make check-native for the native path, or unset NATIVE)
 endif
-RUN :=
-DOCKER_READY :=
-FRONTEND := frontend="$$(scripts/native-tools.sh frontend)" && export SWIFT_FRONTEND="$$frontend" &&
+override RUN :=
+override DOCKER_READY :=
+override FRONTEND := frontend="$$(scripts/native-tools.sh frontend)" && export SWIFT_FRONTEND="$$frontend" &&
 else
-RUN := $(SWIFT_RUN)
-DOCKER_READY := docker-ready
-FRONTEND :=
+override RUN := $(SWIFT_RUN)
+override DOCKER_READY := docker-ready
+override FRONTEND :=
 endif
 
-FORMAT_PATHS := Package.swift Sources Tests scripts
+override FORMAT_PATHS := Package.swift Sources Tests scripts Apple
 
 # The steps of a check, in order, for both paths. On the Docker path every step
 # but guard needs docker-ready first, so make check runs guard, docker-ready,
 # guard-deps, and on.
-CHECK_STEPS := guard guard-deps guard-imports metrics-check build test format-check
+override CHECK_STEPS := guard guard-deps guard-imports guard-extension metrics-check build test format-check
 
-.PHONY: check check-native native-tools docker-ready guard guard-deps guard-imports metrics-check metrics build \
+.PHONY: check check-native native-tools docker-ready guard guard-deps guard-imports guard-extension metrics-check \
+	metrics build \
 	test format-check format clean
 
-# check: everything a ticket must pass. The three core guards, the token pin and
-# the generated metrics tables, build, tests, format check.
+# check: everything a ticket must pass. The three core guards, the extension
+# guard, the token pin and the generated metrics tables, build, tests, format
+# check.
 check: $(CHECK_STEPS)
 	@echo "make check: OK"
 
@@ -92,6 +105,16 @@ guard-deps: $(DOCKER_READY)
 # self-test runs first, for the same reason.
 guard-imports: $(DOCKER_READY)
 	@$(RUN) bash -c '$(FRONTEND) scripts/core-imports-selftest.sh && scripts/core-imports-guard.sh'
+
+# guard-extension: the keyboard extension's folders (Apple/Keyboard and the
+# Apple/KeyboardKit code linked into it) hold only Swift files, with no
+# conditional compilation, importing only the modules the guard allows (as the
+# compiler reads the imports, so it needs the frontend, like guard-imports),
+# and naming no networking API (a text net, not a proof). See the guard's
+# header for what it cannot see. macOS CI also checks project.yml's sources
+# and the built extension's binaries. The self-test runs first.
+guard-extension: $(DOCKER_READY)
+	@$(RUN) bash -c '$(FRONTEND) scripts/extension-guard-selftest.sh && scripts/extension-guard.sh sources'
 
 # metrics-check: the pinned token export matches DesignTokens/tokens.pin, and the
 # committed metrics tables are exactly what the generator makes from it.
