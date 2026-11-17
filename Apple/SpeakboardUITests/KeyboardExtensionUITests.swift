@@ -23,12 +23,13 @@ struct KeyboardOnScreen {
             KeyboardLayout(locale: .english, deviceClass: match.deviceClass, orientation: .portrait))
         self.layout = layout
         let view = app.descendants(matching: .any)["SpeakboardKeyboard"]
-        if view.waitForExistence(timeout: 10) {
+        let keyboard = app.keyboards.firstMatch
+        if view.waitForExistence(timeout: 5) {
             origin = view.frame.origin
             foundBy = "its accessibility identifier, frame \(view.frame)"
-        } else if app.keyboards.firstMatch.waitForExistence(timeout: 5) {
-            origin = app.keyboards.firstMatch.frame.origin
-            foundBy = "app.keyboards, frame \(app.keyboards.firstMatch.frame)"
+        } else if keyboard.exists, abs(Double(keyboard.frame.height) - layout.size.height) < 2 {
+            origin = keyboard.frame.origin
+            foundBy = "app.keyboards, frame \(keyboard.frame), our layout's height"
         } else {
             // The keyboard's view sits above the strip iOS draws below it on Face ID iPhones (systemStrip.height).
             let metrics = layout.metrics
@@ -59,6 +60,35 @@ struct KeyboardOnScreen {
             }
         }
     }
+}
+
+/// Makes Speakboard the keyboard on screen. `xcodebuild test` reinstalls the app, and after that the system shows
+/// Apple's keyboard (seen on CI: its keys in the accessibility tree, and its 226 pt frame), so this taps the system's
+/// next-keyboard button until Apple's key elements are gone and a keyboard of our layout's height is up. A custom
+/// keyboard's view exposes no key elements; Apple's does.
+@MainActor
+func bringUpSpeakboard(_ app: XCUIApplication, height: Double) {
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    for attempt in 0..<6 {
+        let keyboard = app.keyboards.firstMatch
+        let frame = keyboard.exists ? keyboard.frame : .zero
+        let appleKeys = app.keys.count
+        print("speakboard-ui: attempt \(attempt): \(appleKeys) key elements, keyboard frame \(frame)")
+        if appleKeys == 0, abs(Double(frame.height) - height) < 2 { return }
+        if app.descendants(matching: .any)["SpeakboardKeyboard"].exists { return }
+        let candidates = [
+            app.buttons["Next keyboard"], springboard.buttons["Next keyboard"],
+            app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'next keyboard'")).firstMatch,
+            springboard.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'next keyboard'")).firstMatch,
+        ]
+        guard let next = candidates.first(where: { $0.exists }) else {
+            print("speakboard-ui: no next-keyboard button found")
+            break
+        }
+        next.tap()
+        sleep(2)
+    }
+    XCTFail("Speakboard did not come up: the keyboard on screen is not ours (see the speakboard-ui lines)")
 }
 
 final class KeyboardExtensionUITests: XCTestCase {
@@ -95,6 +125,13 @@ final class KeyboardExtensionUITests: XCTestCase {
         app.launch()
         let field = app.textFields["TryField"]
         XCTAssertTrue(field.waitForExistence(timeout: 20), "the app's field")
+        let match = DeviceClass.match(
+            screenWidth: Double(app.windows.firstMatch.frame.width),
+            screenHeight: Double(app.windows.firstMatch.frame.height))
+        let height = try XCTUnwrap(
+            KeyboardLayout(locale: .english, deviceClass: match.deviceClass, orientation: .portrait)
+        ).size.height
+        bringUpSpeakboard(app, height: height)
         let keyboard = try KeyboardOnScreen(app: app)
         screenshot("shift-auto")
         try keyboard.type("hi ok")

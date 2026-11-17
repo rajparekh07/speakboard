@@ -84,6 +84,9 @@ diagnose() {
     xcrun simctl spawn "$udid" log show --style compact --start "$start" \
         --predicate "subsystem == \"$ext_id\" OR process == \"SpeakboardKeyboard\" OR eventMessage CONTAINS \"SpeakboardKeyboard\" OR eventMessage CONTAINS \"$ext_id\"" \
         2>&1 | tail -n 80 || true
+    echo "sim-keyboard: diagnostics: the simulator's keyboard settings"
+    xcrun simctl spawn "$udid" defaults read .GlobalPreferences AppleKeyboards 2>&1 || true
+    xcrun simctl spawn "$udid" defaults read com.apple.keyboard.preferences KeyboardsCurrentAndNext 2>&1 || true
     echo "sim-keyboard: diagnostics: crash reports since the step started"
     local report
     for report in $(find "$HOME/Library/Logs/DiagnosticReports" \
