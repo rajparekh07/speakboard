@@ -16,7 +16,7 @@ final class FakeField: KeyboardTextField {
     var fieldAutocapitalization: Autocapitalization = .sentences
     var fieldReturnKeyType: ReturnKeyType = .default
     var fieldEnablesReturnKeyAutomatically = false
-    var documentIdentifier = UUID()
+    var documentIdentifier: UUID? = UUID()
     var documentContextBeforeInput: String? { text }
     var hasText: Bool { !text.isEmpty }
     func insertText(_ text: String) { self.text += text }

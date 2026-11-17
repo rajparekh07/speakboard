@@ -75,6 +75,27 @@ wait_for_process() {
     return 1
 }
 
+# On a failure after the keyboard should have started: prints into the job log
+# what the simulator says about the extension (its own log lines, the system's
+# lines naming it, and any crash report), because the uploaded artifact is not
+# readable from an agent session (KEY-54).
+diagnose() {
+    echo "sim-keyboard: diagnostics: the simulator's log lines about the keyboard extension, newest last"
+    xcrun simctl spawn "$udid" log show --style compact --start "$start" \
+        --predicate "subsystem == \"$ext_id\" OR process == \"SpeakboardKeyboard\" OR eventMessage CONTAINS \"SpeakboardKeyboard\" OR eventMessage CONTAINS \"$ext_id\"" \
+        2>&1 | tail -n 80 || true
+    echo "sim-keyboard: diagnostics: crash reports since the step started"
+    local report
+    for report in $(find "$HOME/Library/Logs/DiagnosticReports" \
+        "$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Library/Logs/CrashReporter" \
+        -newer "$marker" -type f 2> /dev/null | grep -i speakboard || true); do
+        echo "== $report"
+        head -n 120 "$report"
+    done
+}
+
+marker="$out/.started"
+: > "$marker"
 boot
 xcrun simctl install "$udid" "$app"
 
@@ -114,8 +135,9 @@ xcrun simctl launch "$udid" "$app_id" -SpeakboardFocusField > /dev/null
 # another simulator on the host does not count. The extension's log line, read
 # from this simulator only, is the gate in any case.
 if ! wait_for_process "Devices/$udid/.*SpeakboardKeyboard\.appex" 30; then
-    echo "sim-keyboard: FAIL: the keyboard extension did not start" >&2
+    echo "sim-keyboard: FAIL: the keyboard extension did not start, or did not stay running" >&2
     xcrun simctl io "$udid" screenshot "$out/keyboard.png" > /dev/null 2>&1 || true
+    diagnose
     exit 1
 fi
 sleep 4
@@ -132,9 +154,11 @@ xcrun simctl spawn "$udid" log show --style compact --start "$start" \
 line=$(grep -o 'speakboard-keyboard .*' "$out/keyboard.log" | tail -1 || true)
 if [ -z "$line" ]; then
     echo "sim-keyboard: FAIL: no log line from the keyboard extension (see $out/keyboard.log)" >&2
+    diagnose
     exit 1
 fi
 echo "sim-keyboard: the extension reported: $line"
+grep -o 'speakboard-session .*' "$out/keyboard.log" | tail -1 || true
 case "$line" in
     *fullAccess=true*) ;;
     *)
@@ -164,6 +188,8 @@ if [ -n "$derived" ]; then
         xcrun xcresulttool export attachments --path "$out/ui-$appearance.xcresult" \
             --output-path "$out/ui-$appearance" > /dev/null 2>&1 || echo "sim-keyboard: could not export the screenshots"
         if [ "$status" -ne 0 ]; then
+            tail -n 60 "$out/ui-$appearance.log"
+            diagnose
             echo "sim-keyboard: FAIL: the UI tests failed in $appearance appearance (see $out/ui-$appearance.log)" >&2
             exit 1
         fi

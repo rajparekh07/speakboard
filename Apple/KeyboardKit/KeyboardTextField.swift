@@ -16,8 +16,9 @@ public protocol KeyboardTextField: AnyObject {
     var fieldReturnKeyType: ReturnKeyType { get }
     /// The field's `enablesReturnKeyAutomatically`.
     var fieldEnablesReturnKeyAutomatically: Bool { get }
-    /// Which document the field is: a new value means another field or another app (`documentIdentifier`).
-    var documentIdentifier: UUID { get }
+    /// Which document the field is: a new value means another field or another app (`documentIdentifier`), or nil
+    /// when the field gives none.
+    var documentIdentifier: UUID? { get }
     /// Inserts text at the insertion point.
     func insertText(_ text: String)
     /// Deletes one character backward.
@@ -88,10 +89,12 @@ public final class DocumentProxyField: KeyboardTextField {
         proxy?.enablesReturnKeyAutomatically ?? false
     }
 
-    /// See `KeyboardTextField`. With no proxy, a fixed identifier, so nothing looks like a new document.
-    public var documentIdentifier: UUID { proxy?.documentIdentifier ?? Self.noDocument }
-
-    private static let noDocument = UUID()
+    /// See `KeyboardTextField`. Read by key-value coding, as an optional: Swift imports the proxy's
+    /// `documentIdentifier` as a non-optional `UUID`, and reading it that way traps if the proxy has none yet (before
+    /// a document is connected), which would crash the extension.
+    public var documentIdentifier: UUID? {
+        (proxy as? NSObject)?.value(forKey: "documentIdentifier") as? UUID
+    }
 
     /// See `KeyboardTextField`.
     public func insertText(_ text: String) {

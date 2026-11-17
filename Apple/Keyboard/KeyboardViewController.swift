@@ -43,6 +43,8 @@ final class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         // The keyboard appearing is a new field session: a fresh engine (TypingEngine's notes).
         typing?.beginFieldSession(at: ProcessInfo.processInfo.systemUptime)
+        let document = typing?.field.documentIdentifier == nil ? "none" : "present"
+        log.notice("speakboard-session appeared document=\(document, privacy: .public)")
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
