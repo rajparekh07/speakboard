@@ -47,8 +47,10 @@
 # ("Privacy gate: no networking code in the keyboard extension"), its own
 # ticket.
 #
-# project: reads project.yml as XcodeGen resolves it (`xcodegen dump --type
-# json`, includes and templates applied) and fails unless:
+# project: reads project.yml as `xcodegen dump --type json` gives it: with its
+# includes merged and its variables expanded, but NOT with target templates or
+# multi-platform targets expanded (XcodeGen does those later, when it
+# generates). It fails unless:
 #   - the extension's and KeyboardKit's target entries are exactly the
 #     expected ones below, whole: sources, dependencies, settings, type and
 #     platform, and no other key. A key the guard does not expect (a build
@@ -59,11 +61,26 @@
 #     settings.base, with only the setting names allowed below (their values
 #     are free: the bundle identifier is the owner's to choose);
 #   - the core's package is this repo (`path: .`), which the core guards read;
-#   - the top level holds only the keys this project uses.
+#   - the top level holds only the keys this project uses;
+#   - no target is multi-platform: a `platform` that is a list, or a
+#     `platformPrefix` or `platformSuffix`, fails on any target. XcodeGen
+#     renames a multi-platform target when it expands it (a target
+#     `SpeakboardKeyboar` with `platform: [iOS]` and `platformSuffix: d`
+#     becomes `SpeakboardKeyboard`), after the dump this guard reads, so the
+#     target compared above would not be the one built;
+#   - `options` sets no `preGenCommand` or `postGenCommand`, which run shell
+#     commands when the project is generated;
+#   - no scheme, and no target's own scheme, has `preActions` or
+#     `postActions`, which run scripts inside xcodebuild. Any key of those
+#     names anywhere in the dump fails.
 # So any change to how the extension or KeyboardKit is built, version numbers
 # included, means changing this guard too, on purpose. What it does not
-# compare: the other targets (the app and the tests, which are not linked into
-# the extension), `options` and `schemes`, which add no code to a target.
+# compare: the other targets' entries (the app and the tests, which are not
+# linked into the extension), beyond the multi-platform and scheme checks:
+# their own build scripts and build rules run in their own targets' builds.
+# Target templates (`templates` on a target) are not expanded in the dump; on
+# the extension and KeyboardKit the key fails the whole-entry comparison, and
+# the top-level `targetTemplates` key fails the top-level check.
 #
 # binary: fails if any Mach-O file inside the built .appex loads SwiftUI or a
 # networking framework (Network, CFNetwork) or their Swift overlays, by
@@ -290,7 +307,7 @@ project() {
             problems=$((problems + 1))
             return
         fi
-        for key in $( (keys_of "$work/dump.plist" "$path"; keys_of "$work/want.plist" "") | sort -u); do
+        while IFS= read -r key; do
             got=$(value_xml "$work/dump.plist" "$path.$key")
             want=$(value_xml "$work/want.plist" "$key")
             if [ "$got" != "$want" ]; then
@@ -303,14 +320,17 @@ project() {
                 fi
                 problems=$((problems + 1))
             fi
-        done
+        done < <( (keys_of "$work/dump.plist" "$path"; keys_of "$work/want.plist" "") | sort -u)
     }
 
     # 1. The top level holds only the keys this project uses. Another key
     #    (configFiles, fileGroups, projectReferences, targetTemplates left
     #    unresolved, ...) is not read below, so it fails, named.
+    # Every loop over keys reads them one per line (`while IFS= read -r`), never
+    # by word splitting, so a key with a space or a glob character such as `*`
+    # is read as itself (KEY-63).
     local key
-    for key in $(keys_of "$work/dump.plist" ""); do
+    while IFS= read -r key; do
         case " $top_level_keys " in
             *" $key "*) ;;
             *)
@@ -318,17 +338,17 @@ project() {
                 problems=$((problems + 1))
                 ;;
         esac
-    done
+    done < <(keys_of "$work/dump.plist" "")
     # 2. Project-wide settings apply to every target, the extension included.
     #    Only `base` is allowed, holding only the setting names below; their
     #    values are free (the bundle identifier is the owner's to choose).
-    for key in $(keys_of "$work/dump.plist" settings); do
+    while IFS= read -r key; do
         if [ "$key" != base ]; then
             echo "extension guard: FAIL: project.yml settings.$key is set: only settings.base is allowed" >&2
             problems=$((problems + 1))
         fi
-    done
-    for key in $(keys_of "$work/dump.plist" settings.base); do
+    done < <(keys_of "$work/dump.plist" settings)
+    while IFS= read -r key; do
         case " $project_setting_names " in
             *" $key "*) ;;
             *)
@@ -337,10 +357,53 @@ project() {
                 problems=$((problems + 1))
                 ;;
         esac
-    done
+    done < <(keys_of "$work/dump.plist" settings.base)
     # 3. The core comes from this repo's own package, which the core guards read.
     compare_entry packages.Speakboard '{"path":"."}'
-    # 4. The extension and KeyboardKit, whole: sources, dependencies, settings,
+    # 4. No multi-platform target: XcodeGen renames one when it expands it,
+    #    after this dump, so a target that reads `SpeakboardKeyboar` here can
+    #    be built as `SpeakboardKeyboard`. Target names are plain words here,
+    #    so each is a usable key path.
+    local target platform
+    while IFS= read -r target; do
+        case "$target" in
+            *[!A-Za-z0-9_-]*)
+                echo "extension guard: FAIL: project.yml has a target named \"$target\": only letters, digits, _ and -" \
+                    "are allowed, so the guard can read it" >&2
+                problems=$((problems + 1))
+                continue
+                ;;
+        esac
+        platform=$(value_xml "$work/dump.plist" "targets.$target.platform")
+        case "$platform" in
+            *"<array>"* | *"<array/>"*)
+                echo "extension guard: FAIL: project.yml targets.$target.platform is a list: a multi-platform target," \
+                    "which XcodeGen renames after the dump this guard reads" >&2
+                problems=$((problems + 1))
+                ;;
+        esac
+        for key in platformPrefix platformSuffix; do
+            if [ "$(value_xml "$work/dump.plist" "targets.$target.$key")" != "(missing)" ]; then
+                echo "extension guard: FAIL: project.yml targets.$target.$key is set: it renames a multi-platform" \
+                    "target after the dump this guard reads" >&2
+                problems=$((problems + 1))
+            fi
+        done
+    done < <(keys_of "$work/dump.plist" targets)
+    # 5. No commands at generation, and no scheme scripts in xcodebuild.
+    for key in preGenCommand postGenCommand; do
+        if [ "$(value_xml "$work/dump.plist" "options.$key")" != "(missing)" ]; then
+            echo "extension guard: FAIL: project.yml options.$key is set: it runs a shell command when the project" \
+                "is generated" >&2
+            problems=$((problems + 1))
+        fi
+    done
+    if grep -E '<key>(preActions|postActions)</key>' "$work/dump.plist" > /dev/null; then
+        echo "extension guard: FAIL: project.yml has scheme preActions or postActions: they run scripts inside" \
+            "xcodebuild" >&2
+        problems=$((problems + 1))
+    fi
+    # 6. The extension and KeyboardKit, whole: sources, dependencies, settings,
     #    type and platform, and no other key (build tool plugins, script phases,
     #    build rules, config files, ...).
     compare_entry targets.SpeakboardKeyboard "$expected_extension"
@@ -352,7 +415,8 @@ project() {
         exit 1
     fi
     echo "extension guard: OK (project.yml: the extension and KeyboardKit are exactly as the guard expects, the" \
-        "project-wide settings and top-level keys are ones it knows, and the core is this repo's package)"
+        "project-wide settings and top-level keys are ones it knows, the core is this repo's package, no target is" \
+        "multi-platform, and no generation command or scheme action runs a script)"
 }
 
 # Whether $1 starts with a Mach-O magic number: thin 32- or 64-bit, or

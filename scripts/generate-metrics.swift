@@ -1,12 +1,16 @@
-// Generates the core's metrics tables from the pinned design token export.
+// Generates the core's metrics tables and drawing tokens from the pinned design
+// token export.
 //
 // Usage (inside the Swift image, through scripts/metrics.sh, which checks the
 // export's SHA-256 against the pin first):
-//   swift scripts/generate-metrics.swift <speakboard-tokens.json> <tokens.pin>
-// It writes Swift source to standard output.
+//   swift scripts/generate-metrics.swift <speakboard-tokens.json> <tokens.pin> metrics|drawing
+// It writes Swift source to standard output: `metrics` writes
+// GeneratedMetrics.swift, `drawing` writes GeneratedDrawingTokens.swift. Both
+// read and check the whole export the same way, whichever they write.
 //
-// What it emits (DesignTokens/export-format.md, "What a generator emits",
+// What `metrics` emits (DesignTokens/export-format.md, "What a generator emits",
 // "Metrics tables"):
+// - `TokenExport`: the pinned export's version, SHA-256 and publish label.
 // - `DeviceClass`, one case per device class in the export, in its order.
 // - `Metrics`, one row per device class and orientation, one column per token
 //   whose axes are ["deviceClass", "orientation"]. Each cell carries the value,
@@ -14,26 +18,44 @@
 // - An alias column (`aliasOf`) is a computed property that reads the target
 //   column's value, never a copy of the number.
 //
+// What `drawing` emits (KEY-62): what the keyboard needs to draw keys that the
+// metrics tables do not hold, as plain values in the core (no UIKit types; the
+// Apple side maps them, see Sources/SpeakboardCore/Layout/DrawingCells.swift):
+// - `Palette`, one row per appearance (light, dark), one column per token whose
+//   axes are ["appearance"]: every colour token. Each cell carries the colour
+//   (`#RRGGBBAA` as `RGBAColor(0xRRGGBBAA)`), the tolerance (CIEDE2000), the
+//   kind and a placeholder flag.
+// - `Typography`, one member per token with no axes whose unit is
+//   `uifont-weight` or `font-family`: the label weights and the typeface.
+// - An alias is a computed property that reads its target, as in `Metrics`.
+// Sizes, radii and the shadow offset vary by device class, so they are metrics
+// columns. Tokens with no axes in other units (timings in ms, counts, glyph
+// ids, the mic's invented sizes) are emitted by neither output: nothing that
+// draws the letters keyboard reads them yet.
+//
 // It copies every value exactly as the export gives it: no rounding, no
 // fixing, nothing invented. It fails, writing nothing, on anything it does not
 // know: a schema major version other than 1, an axis shape, unit, tolerance
-// unit or provenance kind it does not know, a non-finite number, an alias
-// whose target differs, or device classes out of the axis order.
+// unit or provenance kind it does not know, a non-finite number, a colour that
+// is not `#RRGGBBAA` in uppercase hex, a weight that is not a UIFont.Weight
+// name, a typeface other than "system", a colour token not on the appearance
+// axis (or an appearance token that is not a colour), an alias whose target
+// differs, or device classes out of the axis order.
 //
 // These are not all the checks the format note asks of a generator that does
 // not run the validator. Of its extra checks it makes: check 1 (through
-// scripts/metrics.sh); the name-collision part of check 2, for the columns it
-// emits; the finite-number half of check 3; check 4 (alias axes, units and
-// values), for the columns it emits, which covers 2 of the export's 12 aliases;
-// and check 5. It skips: the rest of check 2 (prefix ids, reserved and keyword
-// names); the integer-literal half of check 3 (a metrics column holds no
-// `count`); check 4 for the tokens it does not emit (the appearance-axis
-// aliases); check 6 (derived geometry); check 7 (method `derived` with another
-// source); check 8 (no measured values with --no-measured); and check 9 (the
-// summary recount). The validator, validate-tokens.py, runs when an export is
-// pinned (CONTRIBUTING.md, "Design tokens", step 2), not in `make check`,
-// because the Swift image has no Python. The hash pin keeps the export to the
-// one that was validated.
+// scripts/metrics.sh); the name-collision part of check 2, for the columns and
+// members it emits; the finite-number half of check 3; check 4 (alias axes,
+// units and values), for the tokens it emits, which covers all 12 of the
+// export's aliases (2 device class aliases, 10 colour aliases); and check 5. It
+// skips: the rest of check 2 (prefix ids, reserved and keyword names); the
+// integer-literal half of check 3 (neither output holds a `count`); check 6
+// (derived geometry); check 7 (method `derived` with another source); check 8
+// (no measured values with --no-measured); and check 9 (the summary recount).
+// The validator, validate-tokens.py, runs when an export is pinned
+// (CONTRIBUTING.md, "Design tokens", step 2), not in `make check`, because the
+// Swift image has no Python. The hash pin keeps the export to the one that was
+// validated.
 
 import Foundation
 
@@ -43,9 +65,10 @@ func fail(_ message: String) -> Never {
 }
 
 let arguments = CommandLine.arguments
-guard arguments.count == 3 else {
-    fail("usage: generate-metrics.swift <speakboard-tokens.json> <tokens.pin>")
+guard arguments.count == 4, ["metrics", "drawing"].contains(arguments[3]) else {
+    fail("usage: generate-metrics.swift <speakboard-tokens.json> <tokens.pin> metrics|drawing")
 }
+let output = arguments[3]
 
 // MARK: - The pin
 
@@ -260,6 +283,144 @@ for column in columns {
     }
 }
 
+// MARK: Drawing tokens
+
+let appearances = ["light", "dark"]
+guard axes["appearance"] as? [String] == appearances else {
+    fail("axes.appearance is not [light, dark]")
+}
+
+// The units the drawing output reads, each with the one tolerance unit it accepts.
+let drawingToleranceUnits = ["srgb-hex8": "deltaE2000", "uifont-weight": "weightSteps", "font-family": "enum"]
+// UIFont.Weight's names, as the export's `uifont-weight` unit lists them.
+let fontWeights = ["ultraLight", "thin", "light", "regular", "medium", "semibold", "bold", "heavy", "black"]
+
+struct DrawingCell {
+    let value: String
+    let tolerance: Double?
+    let kind: String
+    let isPlaceholder: Bool
+}
+
+struct DrawingToken {
+    let id: String
+    let description: String
+    let unit: String
+    let aliasOf: String?
+    let cells: [String: DrawingCell]  // keyed by appearance, or "" for a token with no axes
+}
+
+func drawingCell(_ leaf: [String: Any], unit: String, context: String) -> (cell: DrawingCell, aliasOf: String?) {
+    guard leaf["unit"] as? String == unit else { fail("\(context): the leaf unit differs from the token's") }
+    guard let value = leaf["value"] as? String else { fail("\(context): the value is not a string") }
+    switch unit {
+    case "srgb-hex8":
+        guard value.range(of: "^#[0-9A-F]{8}$", options: .regularExpression) != nil else {
+            fail("\(context): colour \(value) is not #RRGGBBAA in uppercase hex")
+        }
+    case "uifont-weight":
+        guard fontWeights.contains(value) else { fail("\(context): \(value) is not a UIFont.Weight name") }
+    default:
+        guard value == "system" else { fail("\(context): typeface \(value) is not \"system\"") }
+    }
+    let provenance = dictionary(leaf, "provenance", context)
+
+    func tolerance() -> Double? {
+        guard let tolerance = provenance["tolerance"] as? [String: Any] else { return nil }
+        guard let want = drawingToleranceUnits[unit], tolerance["unit"] as? String == want else {
+            fail("\(context): tolerance unit \(tolerance["unit"] ?? "none") is not the one \(unit) takes")
+        }
+        return number(tolerance["plusMinus"], "\(context) tolerance")
+    }
+
+    switch string(provenance, "kind", context) {
+    case "estimated":
+        guard let plusMinus = tolerance() else { fail("\(context): an estimated value has no tolerance") }
+        let confidence = string(provenance, "confidence", context)
+        guard ["medium", "low", "none"].contains(confidence) else {
+            fail("\(context): unknown confidence `\(confidence)`")
+        }
+        return (
+            DrawingCell(value: value, tolerance: plusMinus, kind: "estimated", isPlaceholder: confidence == "none"), nil
+        )
+    case "measured":
+        // A measured value that states no tolerance counts as 0, as in the metrics tables.
+        return (DrawingCell(value: value, tolerance: tolerance() ?? 0, kind: "measured", isPlaceholder: false), nil)
+    case "invented":
+        return (
+            DrawingCell(value: value, tolerance: nil, kind: "invented", isPlaceholder: false),
+            provenance["aliasOf"] as? String
+        )
+    case let kind:
+        fail("\(context): unknown provenance kind `\(kind)`")
+    }
+}
+
+var colorTokens: [DrawingToken] = []
+var typographyTokens: [DrawingToken] = []
+
+for id in tokens.keys.sorted() {
+    guard let token = tokens[id] as? [String: Any] else { fail("token \(id) is not an object") }
+    let unit = string(token, "unit", "token \(id)")
+    guard let tokenAxes = token["axes"] as? [String] else { fail("token \(id): no axes") }
+    let isColor = unit == "srgb-hex8"
+    let isTypography = unit == "uifont-weight" || unit == "font-family"
+    if tokenAxes == ["appearance"] {
+        guard isColor else { fail("token \(id) varies by appearance but is not a colour (`\(unit)`)") }
+    } else if isColor {
+        fail("token \(id) is a colour that does not vary by appearance")
+    } else if !(tokenAxes.isEmpty && isTypography) {
+        // Device class tokens are metrics columns; other tokens with no axes are not drawing tokens.
+        guard !isTypography else { fail("token \(id): a `\(unit)` token with axes \(tokenAxes)") }
+        continue
+    }
+
+    let values = dictionary(token, "values", "token \(id)")
+    var cells: [String: DrawingCell] = [:]
+    var aliases: Set<String> = []
+    if tokenAxes.isEmpty {
+        let (cell, alias) = drawingCell(values, unit: unit, context: "token \(id)")
+        cells[""] = cell
+        if let alias { aliases.insert(alias) }
+    } else {
+        guard Set(values.keys) == Set(appearances) else { fail("token \(id) does not hold exactly light and dark") }
+        for appearance in appearances {
+            let context = "token \(id), \(appearance)"
+            let (cell, alias) = drawingCell(dictionary(values, appearance, context), unit: unit, context: context)
+            cells[appearance] = cell
+            if let alias { aliases.insert(alias) }
+        }
+    }
+    guard aliases.count <= 1 else { fail("token \(id) is an alias of more than one token") }
+    let drawingToken = DrawingToken(
+        id: id, description: string(token, "description", "token \(id)"), unit: unit, aliasOf: aliases.first,
+        cells: cells)
+    if isColor {
+        colorTokens.append(drawingToken)
+    } else {
+        typographyTokens.append(drawingToken)
+    }
+}
+
+// An alias must have its target's axes and unit, and equal it in every cell, as for the metrics columns.
+for group in [colorTokens, typographyTokens] {
+    for token in group {
+        guard let target = token.aliasOf else { continue }
+        guard let targetToken = group.first(where: { $0.id == target }), targetToken.aliasOf == nil else {
+            fail("token \(token.id) is an alias of \(target), which is not a plain token of the same kind")
+        }
+        guard targetToken.unit == token.unit else { fail("alias \(token.id) and \(target) differ in unit") }
+        guard Set(targetToken.cells.keys) == Set(token.cells.keys) else {
+            fail("alias \(token.id) and \(target) differ in axes")
+        }
+        for (key, cell) in token.cells where cell.kind != "invented" || cell.value != targetToken.cells[key]?.value {
+            fail(
+                "alias \(token.id) differs from \(target) at \(key.isEmpty ? "its value" : key), or is not invented there"
+            )
+        }
+    }
+}
+
 // MARK: - Swift names
 
 func camelCase(_ id: String, separators: Set<Character>) -> String {
@@ -281,8 +442,9 @@ func camelCase(_ id: String, separators: Set<Character>) -> String {
 func propertyName(_ tokenID: String) -> String { camelCase(tokenID, separators: ["."]) }
 func caseName(_ classID: String) -> String { classID.replacingOccurrences(of: "-", with: "") }
 
-let names = columns.map { propertyName($0.id) }
-guard Set(names).count == names.count else { fail("two tokens map to one Swift name") }
+for names in [columns.map(\.id), colorTokens.map(\.id), typographyTokens.map(\.id)].map({ $0.map(propertyName) }) {
+    guard Set(names).count == names.count else { fail("two tokens map to one Swift name") }
+}
 for classID in classIDs where caseName(classID).range(of: "^[a-z][a-z0-9]*$", options: .regularExpression) == nil {
     fail("device class id \(classID) does not make a Swift case name")
 }
@@ -299,6 +461,24 @@ func cellLiteral(_ cell: Cell) -> String {
     case ("estimated", true): return ".placeholder(\(literal(cell.value)), \(tolerance))"
     case ("measured", _): return ".measured(\(literal(cell.value)), \(tolerance))"
     default: return ".invented(\(literal(cell.value)))"
+    }
+}
+
+// A drawing cell as one of ColorCell's, FontWeightCell's or TypefaceCell's
+// constructors, as for the metrics cells. A colour #RRGGBBAA is written
+// RGBAColor(0xRRGGBBAA); a weight or a typeface is its case.
+func drawingValueLiteral(_ value: String, unit: String) -> String {
+    unit == "srgb-hex8" ? "RGBAColor(0x\(value.dropFirst()))" : ".\(value)"
+}
+
+func drawingCellLiteral(_ cell: DrawingCell, unit: String) -> String {
+    let value = drawingValueLiteral(cell.value, unit: unit)
+    let tolerance = cell.tolerance.map(literal) ?? ""
+    switch (cell.kind, cell.isPlaceholder) {
+    case ("estimated", false): return ".estimated(\(value), \(tolerance))"
+    case ("estimated", true): return ".placeholder(\(value), \(tolerance))"
+    case ("measured", _): return ".measured(\(value), \(tolerance))"
+    default: return ".invented(\(value))"
     }
 }
 
@@ -334,6 +514,84 @@ emit("//")
 emit("// Every value is copied from the export as it is: estimates and placeholders until the measured")
 emit("// tokens ticket replaces them. Each cell keeps its tolerance, kind and placeholder flag.")
 emit()
+
+// MARK: Drawing tokens
+
+func emitDrawingDoc(_ token: DrawingToken, indent: String) {
+    var doc = "`\(token.id)` (\(token.unit)). \(token.description)"
+    if let target = token.aliasOf { doc += " An alias of `\(target)`: it reads that token's value." }
+    out += docLines(doc, indent: indent)
+}
+
+if output == "drawing" {
+    emit("// The drawing tokens: every colour token (axes [\"appearance\"]) as a column of `Palette`, one row per")
+    emit("// appearance, and every weight and typeface token (no axes) as a member of `Typography`. Sizes, radii and")
+    emit("// the key shadow's offset vary by device class: they are columns of `Metrics` (GeneratedMetrics.swift).")
+    emit()
+    emit("/// The colours of one appearance: one cell per colour token in the export, each of which varies by")
+    emit("/// appearance. Read a row with `Palette.of(_:)`.")
+    emit("public struct Palette: Equatable, Sendable {")
+    for (index, token) in colorTokens.enumerated() {
+        if index > 0 { emit() }
+        emitDrawingDoc(token, indent: "    ")
+        if let target = token.aliasOf {
+            emit("    public var \(propertyName(token.id)): ColorCell {")
+            emit("        .invented(\(propertyName(target)).color)")
+            emit("    }")
+        } else {
+            emit("    public let \(propertyName(token.id)): ColorCell")
+        }
+    }
+    emit("}")
+    emit()
+    emit("extension Palette {")
+    emit("    /// The palette for an appearance.")
+    emit("    public static func of(_ appearance: Appearance) -> Palette {")
+    emit("        switch appearance {")
+    let storedColors = colorTokens.filter { $0.aliasOf == nil }
+    for appearance in appearances {
+        emit("        case .\(appearance):")
+        emit("            return Palette(")
+        for (index, token) in storedColors.enumerated() {
+            guard let cell = token.cells[appearance] else { fail("missing cell") }
+            let comma = index == storedColors.count - 1 ? "" : ","
+            emit("                \(propertyName(token.id)): \(drawingCellLiteral(cell, unit: token.unit))\(comma)")
+        }
+        emit("            )")
+    }
+    emit("        }")
+    emit("    }")
+    emit("}")
+    emit()
+    emit("/// The weight and typeface tokens: those with no axes, one value for every device class, orientation and")
+    emit("/// appearance. Each member is computed, so reading one allocates nothing and holds no global state.")
+    emit("public enum Typography {")
+    for (index, token) in typographyTokens.enumerated() {
+        if index > 0 { emit() }
+        emitDrawingDoc(token, indent: "    ")
+        let type = token.unit == "uifont-weight" ? "FontWeightCell" : "TypefaceCell"
+        let member = token.unit == "uifont-weight" ? "weight" : "typeface"
+        guard let cell = token.cells[""] else { fail("missing cell") }
+        if let target = token.aliasOf {
+            emit(
+                "    public static var \(propertyName(token.id)): \(type) { .invented(\(propertyName(target)).\(member)) }"
+            )
+        } else {
+            emit(
+                "    public static var \(propertyName(token.id)): \(type) { \(drawingCellLiteral(cell, unit: token.unit)) }"
+            )
+        }
+    }
+    emit("}")
+    for line in out where line.count > 120 {
+        fail("a generated line is longer than 120 characters: \(line)")
+    }
+    print(out.joined(separator: "\n"))
+    exit(0)
+}
+
+// MARK: Metrics tables
+
 emit("/// The pinned token export these tables were generated from.")
 emit("public enum TokenExport {")
 emit("    /// The export's token set version.")

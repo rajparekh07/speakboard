@@ -56,15 +56,16 @@ override FORMAT_PATHS := Package.swift Sources Tests scripts Apple
 # The steps of a check, in order, for both paths. On the Docker path every step
 # but guard needs docker-ready first, so make check runs guard, docker-ready,
 # guard-deps, and on.
-override CHECK_STEPS := guard guard-deps guard-imports guard-extension metrics-check build test format-check
+override CHECK_STEPS := guard guard-deps guard-imports guard-extension guard-literals metrics-check build test \
+	format-check
 
-.PHONY: check check-native native-tools docker-ready guard guard-deps guard-imports guard-extension metrics-check \
-	metrics build \
+.PHONY: check check-native native-tools docker-ready guard guard-deps guard-imports guard-extension guard-literals \
+	metrics-check metrics build \
 	test format-check format clean
 
 # check: everything a ticket must pass. The three core guards, the extension
-# guard, the token pin and the generated metrics tables, build, tests, format
-# check.
+# guard, the literal guard, the token pin and the generated token files, build,
+# tests, format check.
 check: $(CHECK_STEPS)
 	@echo "make check: OK"
 
@@ -116,12 +117,21 @@ guard-imports: $(DOCKER_READY)
 guard-extension: $(DOCKER_READY)
 	@$(RUN) bash -c '$(FRONTEND) scripts/extension-guard-selftest.sh && scripts/extension-guard.sh sources'
 
+# guard-literals: the keyboard's view code (Apple/Keyboard, Apple/KeyboardKit)
+# types no number used as a metric and makes no colour from literals, as the
+# compiler parses it (so it needs the frontend, like guard-imports). See the
+# guard's header for its allowances and what it cannot see. The self-test runs
+# first.
+guard-literals: $(DOCKER_READY)
+	@$(RUN) bash -c '$(FRONTEND) scripts/literal-guard-selftest.sh && scripts/literal-guard.sh'
+
 # metrics-check: the pinned token export matches DesignTokens/tokens.pin, and the
-# committed metrics tables are exactly what the generator makes from it.
+# committed generated files (the metrics tables and the drawing tokens) are
+# exactly what the generator makes from it.
 metrics-check: $(DOCKER_READY)
 	@$(RUN) scripts/metrics.sh check
 
-# metrics: regenerate the metrics tables from the pinned token export.
+# metrics: regenerate the metrics tables and drawing tokens from the pinned token export.
 metrics: $(DOCKER_READY)
 	@$(RUN) scripts/metrics.sh write
 

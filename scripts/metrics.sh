@@ -1,22 +1,30 @@
 #!/usr/bin/env bash
-# The core's metrics tables and the pinned token export they come from.
+# The core's generated token files and the pinned token export they come from.
 #
 #   scripts/metrics.sh check   fails unless every pinned file's SHA-256 matches
-#                              DesignTokens/tokens.pin, and the committed
-#                              tables equal what the generator makes from the
-#                              pinned export (make check)
-#   scripts/metrics.sh write   checks the hashes, then rewrites the tables
-#                              (make metrics)
+#                              DesignTokens/tokens.pin, and each committed
+#                              generated file equals what the generator makes
+#                              from the pinned export (make check)
+#   scripts/metrics.sh write   checks the hashes, then rewrites the generated
+#                              files (make metrics)
 #
-# The tables are Sources/SpeakboardCore/Layout/GeneratedMetrics.swift. Nobody
-# edits them by hand. Runs inside the Swift image, or natively (make
-# check-native), from the repo root.
+# The generated files are Sources/SpeakboardCore/Layout/GeneratedMetrics.swift
+# (the metrics tables) and Sources/SpeakboardCore/Layout/GeneratedDrawingTokens.swift
+# (the colours, weights and typeface, KEY-62). Nobody edits them by hand. Runs
+# inside the Swift image, or natively (make check-native), from the repo root.
 set -euo pipefail
 
 mode="${1:?usage: scripts/metrics.sh check|write}"
 tokens="DesignTokens"
 pin="$tokens/tokens.pin"
-tables="Sources/SpeakboardCore/Layout/GeneratedMetrics.swift"
+# The generator's outputs, and the file each one makes.
+outputs="metrics drawing"
+generated_file() {
+    case "$1" in
+        metrics) echo "Sources/SpeakboardCore/Layout/GeneratedMetrics.swift" ;;
+        drawing) echo "Sources/SpeakboardCore/Layout/GeneratedDrawingTokens.swift" ;;
+    esac
+}
 work=".build/metrics"
 
 pinned() {  # pinned <key>: the value of "<key>: <value>" in the pin file
@@ -58,21 +66,29 @@ verify export-format.md format-note-sha256
 echo "metrics: OK: the pinned export matches $pin ($(pinned publish-label), sha256 $(pinned sha256))"
 
 mkdir -p "$work"
-swift scripts/generate-metrics.swift "$tokens/speakboard-tokens.json" "$pin" > "$work/GeneratedMetrics.swift"
+for output in $outputs; do
+    swift scripts/generate-metrics.swift "$tokens/speakboard-tokens.json" "$pin" "$output" > "$work/$output.swift"
+done
 
 case "$mode" in
     check)
-        if ! diff -u "$tables" "$work/GeneratedMetrics.swift" > "$work/diff.txt"; then
-            echo "metrics: FAIL: $tables differs from what scripts/generate-metrics.swift makes from the pinned export:" >&2
-            head -n 40 "$work/diff.txt" >&2
-            echo "The tables are generated, never edited by hand. Run \`make metrics\` to regenerate them." >&2
-            exit 1
-        fi
-        echo "metrics: OK: $tables is what the generator makes from the pinned export"
+        for output in $outputs; do
+            file=$(generated_file "$output")
+            if ! diff -u "$file" "$work/$output.swift" > "$work/diff.txt"; then
+                echo "metrics: FAIL: $file differs from what scripts/generate-metrics.swift makes from the pinned export:" >&2
+                head -n 40 "$work/diff.txt" >&2
+                echo "Generated files are never edited by hand. Run \`make metrics\` to regenerate them." >&2
+                exit 1
+            fi
+            echo "metrics: OK: $file is what the generator makes from the pinned export"
+        done
         ;;
     write)
-        cp "$work/GeneratedMetrics.swift" "$tables"
-        echo "metrics: wrote $tables"
+        for output in $outputs; do
+            file=$(generated_file "$output")
+            cp "$work/$output.swift" "$file"
+            echo "metrics: wrote $file"
+        done
         ;;
     *)
         echo "usage: scripts/metrics.sh check|write" >&2
