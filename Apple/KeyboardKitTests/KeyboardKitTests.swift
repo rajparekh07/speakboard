@@ -716,6 +716,33 @@ struct KeyboardRedrawTests {
         #expect(rig.view.glyphName(at: shift) == "shift")
     }
 
+    @Test("Caps lock: manual to locked writes only Shift's glyph (and fill); locked to off the letters' case too")
+    func capsLock() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let shift = try rig.index(of: .shift)
+        let letters = rig.layout.keys.indices.filter {
+            if case .letter = rig.layout.keys[$0].kind { return true }
+            return false
+        }
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .manual)
+        let manual = rig.view.layerWrites
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .locked)
+        #expect(Self.writes(manual, rig.view.layerWrites) == [shift: Self.only(fill: 2, glyph: 1)])
+        #expect(rig.view.glyphName(at: shift) == "capslock.fill")
+
+        rig.clock += 1
+        let locked = rig.view.layerWrites
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .off)
+        var expected: [Int: KeyLayerWrites] = [shift: Self.only(fill: 2, glyph: 1)]
+        for index in letters { expected[index] = Self.only(label: 1) }
+        #expect(Self.writes(locked, rig.view.layerWrites) == expected)
+        #expect(rig.view.glyphName(at: shift) == "shift")
+        #expect(rig.view.labelText(at: letters[0]) == "q")
+    }
+
     @Test("A tap on automatic Shift: Shift's fill and glyph; then a context change that changes nothing writes nothing")
     func shiftWithoutVisibleChange() throws {
         let rig = try Rig(autocapitalization: .sentences)
