@@ -66,35 +66,82 @@ if [ "${1:-}" = project ]; then
     printf '#!/bin/bash\ncat "$DUMP"\n' > "$work/bin/xcodegen"
     chmod +x "$work/bin/xcodegen"
     touch "$work/project.yml"
-    # dump <extension sources> <extension dependencies> <KeyboardKit sources> <KeyboardKit dependencies>
-    dump() {
-        printf '{"targets":{"SpeakboardKeyboard":{"sources":%s,"dependencies":%s},' "$1" "$2"
-        printf '"KeyboardKit":{"sources":%s,"dependencies":%s}}}' "$3" "$4"
-    }
+    # Dumps shaped like XcodeGen's for this project, built from literal parts
+    # (no pattern substitution, which bash 3.2 handles differently).
     ext_src='[{"path":"Apple/Keyboard","excludes":["Info.plist"]}]'
     ext_dep='[{"embed":false,"target":"KeyboardKit"}]'
+    ext_set='{"base":{"APPLICATION_EXTENSION_API_ONLY":true,"INFOPLIST_FILE":"Apple/Keyboard/Info.plist","PRODUCT_BUNDLE_IDENTIFIER":"$(SPEAKBOARD_BUNDLE_ID).keyboard","CURRENT_PROJECT_VERSION":"1","MARKETING_VERSION":"0.1","PRODUCT_NAME":"SpeakboardKeyboard"}}'
     kit_src='[{"path":"Apple/KeyboardKit"}]'
     kit_dep='[{"package":"Speakboard","product":"SpeakboardCore"}]'
+    kit_set='{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"$(SPEAKBOARD_BUNDLE_ID).KeyboardKit","GENERATE_INFOPLIST_FILE":true,"APPLICATION_EXTENSION_API_ONLY":true}}'
+    proj_set='{"base":{"CODE_SIGN_STYLE":"Automatic","TARGETED_DEVICE_FAMILY":"1","SWIFT_VERSION":"6.0","SPEAKBOARD_BUNDLE_ID":"dev.speakboard.placeholder","ENABLE_USER_SCRIPT_SANDBOXING":true}}'
+    packages='{"Speakboard":{"path":"."}}'
+    # ext_entry <sources> <dependencies> <settings> [<more members, each starting with a comma>]
+    ext_entry() {
+        printf '{"type":"app-extension","platform":"iOS","sources":%s,"dependencies":%s,"settings":%s%s}' \
+            "$1" "$2" "$3" "${4:-}"
+    }
+    kit_entry() {
+        printf '{"type":"framework.static","platform":"iOS","sources":%s,"dependencies":%s,"settings":%s%s}' \
+            "$1" "$2" "$3" "${4:-}"
+    }
+    ext=$(ext_entry "$ext_src" "$ext_dep" "$ext_set")
+    kit=$(kit_entry "$kit_src" "$kit_dep" "$kit_set")
+    # dump <extension entry> <KeyboardKit entry> <project settings> <packages> [<more top-level members>]
+    dump() {
+        printf '{"name":"Speakboard","options":{},"schemes":{},"settings":%s,"packages":%s%s,' "$3" "$4" "${5:-}"
+        printf '"targets":{"Speakboard":{"type":"application"},"SpeakboardKeyboard":%s,"KeyboardKit":%s}}' "$1" "$2"
+    }
     project_case() {
         printf '%s\n' "$4" > "$work/dump.json"
         check "$1" "$2" "$3" env PATH="$work/bin:$PATH" DUMP="$work/dump.json" "$guard" project "$work/project.yml"
     }
-    project_case pass "the extension's and KeyboardKit's sources and dependencies as the guard scans them" "" \
-        "$(dump "$ext_src" "$ext_dep" "$kit_src" "$kit_dep")"
+    project_case pass "the project as it is" "" "$(dump "$ext" "$kit" "$proj_set" "$packages")"
     project_case pass "the same, with each dictionary's keys in another order" "" \
-        "$(dump '[{"excludes":["Info.plist"],"path":"Apple/Keyboard"}]' '[{"target":"KeyboardKit","embed":false}]' \
-            "$kit_src" '[{"product":"SpeakboardCore","package":"Speakboard"}]')"
-    project_case fail "a second source path for the extension" "targets.SpeakboardKeyboard.sources" \
-        "$(dump '[{"path":"Apple/Keyboard","excludes":["Info.plist"]},{"path":"Apple/Other"}]' "$ext_dep" "$kit_src" "$kit_dep")"
-    project_case fail "the extension without its Info.plist excluded" "targets.SpeakboardKeyboard.sources" \
-        "$(dump '[{"path":"Apple/Keyboard"}]' "$ext_dep" "$kit_src" "$kit_dep")"
-    project_case fail "another source path for KeyboardKit" "targets.KeyboardKit.sources" \
-        "$(dump "$ext_src" "$ext_dep" '[{"path":"Apple/Elsewhere"}]' "$kit_dep")"
-    project_case fail "a package dependency for the extension" "targets.SpeakboardKeyboard.dependencies" \
-        "$(dump "$ext_src" '[{"embed":false,"target":"KeyboardKit"},{"package":"X","product":"Y"}]' "$kit_src" "$kit_dep")"
-    project_case fail "another dependency for KeyboardKit" "targets.KeyboardKit.dependencies" \
-        "$(dump "$ext_src" "$ext_dep" "$kit_src" '[{"package":"Speakboard","product":"Other"}]')"
-    project_case fail "no extension target" "targets.SpeakboardKeyboard.sources is (missing)" '{"targets":{}}'
+        "$(dump '{"settings":'"$ext_set"',"dependencies":[{"target":"KeyboardKit","embed":false}],"platform":"iOS","sources":[{"excludes":["Info.plist"],"path":"Apple/Keyboard"}],"type":"app-extension"}' \
+            "$(kit_entry "$kit_src" '[{"product":"SpeakboardCore","package":"Speakboard"}]' "$kit_set")" \
+            "$proj_set" "$packages")"
+    project_case pass "another bundle identifier (the owner's to choose)" "" \
+        "$(dump "$ext" "$kit" '{"base":{"CODE_SIGN_STYLE":"Automatic","TARGETED_DEVICE_FAMILY":"1","SWIFT_VERSION":"6.0","SPEAKBOARD_BUNDLE_ID":"com.example.real","ENABLE_USER_SCRIPT_SANDBOXING":true}}' "$packages")"
+    # Ways to add code the guard would not scan.
+    project_case fail "a build tool plugin on the extension" "targets.SpeakboardKeyboard.buildToolPlugins is set" \
+        "$(dump "$(ext_entry "$ext_src" "$ext_dep" "$ext_set" ',"buildToolPlugins":[{"plugin":"CodeGen","package":"Speakboard"}]')" "$kit" "$proj_set" "$packages")"
+    project_case fail "a pre-build script on KeyboardKit" "targets.KeyboardKit.preBuildScripts is set" \
+        "$(dump "$ext" "$(kit_entry "$kit_src" "$kit_dep" "$kit_set" ',"preBuildScripts":[{"script":"echo hi"}]')" "$proj_set" "$packages")"
+    project_case fail "a post-compile script on the extension" "targets.SpeakboardKeyboard.postCompileScripts is set" \
+        "$(dump "$(ext_entry "$ext_src" "$ext_dep" "$ext_set" ',"postCompileScripts":[{"script":"echo hi"}]')" "$kit" "$proj_set" "$packages")"
+    project_case fail "a build rule on KeyboardKit" "targets.KeyboardKit.buildRules is set" \
+        "$(dump "$ext" "$(kit_entry "$kit_src" "$kit_dep" "$kit_set" ',"buildRules":[{"fileType":"pattern.proxy","script":"x"}]')" "$proj_set" "$packages")"
+    project_case fail "config files on the extension" "targets.SpeakboardKeyboard.configFiles is set" \
+        "$(dump "$(ext_entry "$ext_src" "$ext_dep" "$ext_set" ',"configFiles":{"Debug":"x.xcconfig"}')" "$kit" "$proj_set" "$packages")"
+    project_case fail "OTHER_SWIFT_FLAGS on the extension" "targets.SpeakboardKeyboard.settings is" \
+        "$(dump "$(ext_entry "$ext_src" "$ext_dep" '{"base":{"OTHER_SWIFT_FLAGS":"-DNET","APPLICATION_EXTENSION_API_ONLY":true,"INFOPLIST_FILE":"Apple/Keyboard/Info.plist","PRODUCT_BUNDLE_IDENTIFIER":"$(SPEAKBOARD_BUNDLE_ID).keyboard","CURRENT_PROJECT_VERSION":"1","MARKETING_VERSION":"0.1","PRODUCT_NAME":"SpeakboardKeyboard"}}')" "$kit" "$proj_set" "$packages")"
+    project_case fail "a bridging header on KeyboardKit" "targets.KeyboardKit.settings is" \
+        "$(dump "$ext" "$(kit_entry "$kit_src" "$kit_dep" '{"base":{"SWIFT_OBJC_BRIDGING_HEADER":"B.h","PRODUCT_BUNDLE_IDENTIFIER":"$(SPEAKBOARD_BUNDLE_ID).KeyboardKit","GENERATE_INFOPLIST_FILE":true,"APPLICATION_EXTENSION_API_ONLY":true}}')" "$proj_set" "$packages")"
+    project_case fail "a project-wide OTHER_LDFLAGS" "settings.base.OTHER_LDFLAGS is set" \
+        "$(dump "$ext" "$kit" '{"base":{"OTHER_LDFLAGS":"-lnet","CODE_SIGN_STYLE":"Automatic","TARGETED_DEVICE_FAMILY":"1","SWIFT_VERSION":"6.0","SPEAKBOARD_BUNDLE_ID":"dev.speakboard.placeholder","ENABLE_USER_SCRIPT_SANDBOXING":true}}' "$packages")"
+    project_case fail "project-wide settings for one configuration" "settings.configs is set" \
+        "$(dump "$ext" "$kit" '{"base":{"SWIFT_VERSION":"6.0"},"configs":{"Debug":{"OTHER_SWIFT_FLAGS":"-DNET"}}}' "$packages")"
+    project_case fail "a top-level key the guard does not know" "the top-level key configFiles" \
+        "$(dump "$ext" "$kit" "$proj_set" "$packages" ',"configFiles":{"Debug":"x.xcconfig"}')"
+    project_case fail "the core's package from elsewhere" "packages.Speakboard.path is" \
+        "$(dump "$ext" "$kit" "$proj_set" '{"Speakboard":{"path":"../other"}}')"
+    # Sources, dependencies and versions.
+    project_case fail "a second source path for the extension" "targets.SpeakboardKeyboard.sources is" \
+        "$(dump "$(ext_entry '[{"path":"Apple/Keyboard","excludes":["Info.plist"]},{"path":"Apple/Other"}]' "$ext_dep" "$ext_set")" "$kit" "$proj_set" "$packages")"
+    project_case fail "the extension without its Info.plist excluded" "targets.SpeakboardKeyboard.sources is" \
+        "$(dump "$(ext_entry '[{"path":"Apple/Keyboard"}]' "$ext_dep" "$ext_set")" "$kit" "$proj_set" "$packages")"
+    project_case fail "another source path for KeyboardKit" "targets.KeyboardKit.sources is" \
+        "$(dump "$ext" "$(kit_entry '[{"path":"Apple/Elsewhere"}]' "$kit_dep" "$kit_set")" "$proj_set" "$packages")"
+    project_case fail "a package dependency for the extension" "targets.SpeakboardKeyboard.dependencies is" \
+        "$(dump "$(ext_entry "$ext_src" '[{"embed":false,"target":"KeyboardKit"},{"package":"X","product":"Y"}]' "$ext_set")" "$kit" "$proj_set" "$packages")"
+    project_case fail "another dependency for KeyboardKit" "targets.KeyboardKit.dependencies is" \
+        "$(dump "$ext" "$(kit_entry "$kit_src" '[{"package":"Speakboard","product":"Other"}]' "$kit_set")" "$proj_set" "$packages")"
+    project_case fail "a version number changed (a change to the guard too, on purpose)" \
+        "targets.SpeakboardKeyboard.settings is" \
+        "$(dump "$(ext_entry "$ext_src" "$ext_dep" '{"base":{"APPLICATION_EXTENSION_API_ONLY":true,"INFOPLIST_FILE":"Apple/Keyboard/Info.plist","PRODUCT_BUNDLE_IDENTIFIER":"$(SPEAKBOARD_BUNDLE_ID).keyboard","CURRENT_PROJECT_VERSION":"1","MARKETING_VERSION":"0.2","PRODUCT_NAME":"SpeakboardKeyboard"}}')" "$kit" "$proj_set" "$packages")"
+    project_case fail "no extension target" "project.yml has no targets.SpeakboardKeyboard" \
+        '{"name":"Speakboard","settings":{"base":{}},"packages":{"Speakboard":{"path":"."}},"targets":{"KeyboardKit":{}}}'
     check fail "no project spec" "no project spec" env PATH="$work/bin:$PATH" "$guard" project "$work/missing.yml"
     finish
     exit 0
@@ -176,6 +223,21 @@ mkdir -p "$work/ok" "$work/bad" "$work/empty"
 printf 'import UIKit\n' > "$work/ok/A.swift"
 printf 'import SwiftUI\n' > "$work/bad/B.swift"
 check fail "two folders, the second importing SwiftUI" "B.swift imports SwiftUI" "$guard" sources "$work/ok" "$work/bad"
+check fail "two folders, the first importing SwiftUI" "B.swift imports SwiftUI" "$guard" sources "$work/bad" "$work/ok"
+# Symbolic links: followed, as Xcode follows them.
+mkdir -p "$work/elsewhere" "$work/linked"
+printf 'import SwiftUI\n' > "$work/elsewhere/Real.swift"
+printf 'import UIKit\n' > "$work/linked/View.swift"
+ln -s ../elsewhere/Real.swift "$work/linked/Link.swift"
+check fail "a symlinked Swift file importing SwiftUI" "Link.swift imports SwiftUI" "$guard" sources "$work/linked"
+mkdir -p "$work/dangling"
+printf 'import UIKit\n' > "$work/dangling/View.swift"
+ln -s /nonexistent/X.swift "$work/dangling/Gone.swift"
+check fail "a link that points nowhere" "Gone.swift is a symbolic link that points nowhere" "$guard" sources "$work/dangling"
+mkdir -p "$work/finder"
+printf 'import UIKit\n' > "$work/finder/View.swift"
+printf 'Bud1' > "$work/finder/.DS_Store"
+check pass "a Finder .DS_Store beside the Swift" "" "$guard" sources "$work/finder"
 check fail "no Swift files" "no Swift files" "$guard" sources "$work/empty"
 check fail "a missing folder" "folder not found" "$guard" sources "$work/missing"
 check fail "no compiler frontend" "is not available" env SWIFT_FRONTEND="$work/no-such-frontend" \

@@ -48,7 +48,41 @@ struct DeviceClassMatchingTests {
         )
         #expect(DeviceClass.match(screenWidth: 1024, screenHeight: 1366).deviceClass == .iphone440x956)
         #expect(DeviceClass.match(screenWidth: 0, screenHeight: 0).deviceClass == .iphone375x667)
-        #expect(DeviceClass.match(screenWidth: .nan, screenHeight: 874).deviceClass == .iphone375x667)
+    }
+
+    @Test("A huge finite size, in either order, gets the widest class")
+    func hugeSizes() {
+        let huge = Double.greatestFiniteMagnitude
+        let sizes: [(Double, Double)] = [(1e308, 1e308), (huge, huge), (1e308, 874), (874, 1e308), (1e17, 1e17)]
+        for (width, height) in sizes {
+            #expect(
+                DeviceClass.match(screenWidth: width, screenHeight: height)
+                    == .init(deviceClass: .iphone440x956, isExact: false),
+                "\(width) x \(height)")
+        }
+    }
+
+    @Test("A negative side counts as 0, in either order")
+    func negativeSides() {
+        // Portrait width 0: the two 375-point classes, then the nearer height (874 is nearer 812 than 667).
+        #expect(DeviceClass.match(screenWidth: -5, screenHeight: 874).deviceClass == .iphone375x812)
+        #expect(DeviceClass.match(screenWidth: 874, screenHeight: -5).deviceClass == .iphone375x812)
+        #expect(DeviceClass.match(screenWidth: -1e308, screenHeight: -1e308).deviceClass == .iphone375x667)
+    }
+
+    @Test("A side that is not finite, in either argument, gets the first class, not exact")
+    func nonFiniteSides() {
+        let sizes: [(Double, Double)] = [
+            (.nan, 874), (874, .nan), (.nan, .nan),
+            (.infinity, 874), (874, .infinity), (.infinity, .infinity),
+            (-.infinity, 874), (874, -.infinity), (.infinity, -.infinity),
+        ]
+        for (width, height) in sizes {
+            #expect(
+                DeviceClass.match(screenWidth: width, screenHeight: height)
+                    == .init(deviceClass: .iphone375x667, isExact: false),
+                "\(width) x \(height)")
+        }
     }
 
     @Test("Wider than high is landscape; otherwise, a square included, portrait")
@@ -56,5 +90,7 @@ struct DeviceClassMatchingTests {
         #expect(Orientation(screenWidth: 874, screenHeight: 402) == .landscape)
         #expect(Orientation(screenWidth: 402, screenHeight: 874) == .portrait)
         #expect(Orientation(screenWidth: 500, screenHeight: 500) == .portrait)
+        #expect(Orientation(screenWidth: .nan, screenHeight: 874) == .portrait)
+        #expect(Orientation(screenWidth: 874, screenHeight: .nan) == .portrait)
     }
 }

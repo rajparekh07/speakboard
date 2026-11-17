@@ -13,9 +13,13 @@
 # sources: for the extension's own folder and KeyboardKit's (the code linked
 # into the extension; the core it links is held to Foundation by the core
 # guards), it fails:
-#   1. on any file that is not a Swift file, except an Info.plist: the targets
+#   1. on any file that is not a Swift file, except an Info.plist and Finder's
+#      .DS_Store (by name: never compiled, and ignored by git): the targets
 #      compile every source file in their folders, so an Objective-C or C file
-#      could import anything, and only Swift files are read below;
+#      could import anything, and only Swift files are read below. It follows
+#      symbolic links, as Xcode does, and fails on a link that points nowhere
+#      (in the Swift image, an absolute link to a file outside the repo does),
+#      since the guard cannot read what Xcode elsewhere might compile;
 #   2. on conditional compilation (`#if`, `#elseif`, `#else`, `#endif`), read
 #      as text, as the core imports guard does and for the same reason: the
 #      compiler reports imports only in branches it compiles, so an import in
@@ -43,12 +47,23 @@
 # ("Privacy gate: no networking code in the keyboard extension"), its own
 # ticket.
 #
-# project: fails unless project.yml, as XcodeGen resolves it, gives the
-# extension exactly the folder Apple/Keyboard (less its Info.plist) and
-# KeyboardKit exactly Apple/KeyboardKit as sources, and their dependencies are
-# exactly KeyboardKit (for the extension) and the core (for KeyboardKit). So a
-# new source path or dependency for either cannot go unscanned: adding one
-# means changing this guard too.
+# project: reads project.yml as XcodeGen resolves it (`xcodegen dump --type
+# json`, includes and templates applied) and fails unless:
+#   - the extension's and KeyboardKit's target entries are exactly the
+#     expected ones below, whole: sources, dependencies, settings, type and
+#     platform, and no other key. A key the guard does not expect (a build
+#     tool plugin, a pre-build or post-compile script, a build rule, config
+#     files, ...) fails, named, as does any changed value (a new source path or
+#     dependency, OTHER_SWIFT_FLAGS, OTHER_LDFLAGS, a bridging header, ...);
+#   - the project-wide settings, which apply to every target, hold only
+#     settings.base, with only the setting names allowed below (their values
+#     are free: the bundle identifier is the owner's to choose);
+#   - the core's package is this repo (`path: .`), which the core guards read;
+#   - the top level holds only the keys this project uses.
+# So any change to how the extension or KeyboardKit is built, version numbers
+# included, means changing this guard too, on purpose. What it does not
+# compare: the other targets (the app and the tests, which are not linked into
+# the extension), `options` and `schemes`, which add no code to a target.
 #
 # binary: fails if any Mach-O file inside the built .appex loads SwiftUI or a
 # networking framework (Network, CFNetwork) or their Swift overlays, by
@@ -73,6 +88,25 @@ set -euo pipefail
 # Anything else, SwiftUI, SwiftUICore, Network and FoundationNetworking
 # included, fails. A new module is a change to this list, with its reason.
 allowed_modules="Foundation UIKit QuartzCore OSLog SpeakboardCore KeyboardKit"
+
+# The project mode's expected entries: the extension and KeyboardKit as
+# project.yml builds them today, as XcodeGen resolves them (key order does not
+# matter). A change to either target is a change here too.
+expected_extension='{"type":"app-extension","platform":"iOS",
+  "sources":[{"path":"Apple/Keyboard","excludes":["Info.plist"]}],
+  "dependencies":[{"target":"KeyboardKit","embed":false}],
+  "settings":{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"$(SPEAKBOARD_BUNDLE_ID).keyboard","PRODUCT_NAME":"SpeakboardKeyboard",
+    "INFOPLIST_FILE":"Apple/Keyboard/Info.plist","APPLICATION_EXTENSION_API_ONLY":true,
+    "MARKETING_VERSION":"0.1","CURRENT_PROJECT_VERSION":"1"}}}'
+expected_keyboardkit='{"type":"framework.static","platform":"iOS",
+  "sources":[{"path":"Apple/KeyboardKit"}],
+  "dependencies":[{"package":"Speakboard","product":"SpeakboardCore"}],
+  "settings":{"base":{"PRODUCT_BUNDLE_IDENTIFIER":"$(SPEAKBOARD_BUNDLE_ID).KeyboardKit",
+    "GENERATE_INFOPLIST_FILE":true,"APPLICATION_EXTENSION_API_ONLY":true}}}'
+# The project-wide setting names allowed in settings.base, and the top-level
+# keys project.yml may have.
+project_setting_names="SPEAKBOARD_BUNDLE_ID SWIFT_VERSION CODE_SIGN_STYLE TARGETED_DEVICE_FAMILY ENABLE_USER_SCRIPT_SANDBOXING"
+top_level_keys="name options packages schemes settings targets"
 
 net_names='URLSession|NSURLSession|URLSessionTask|NSURLConnection|NWConnection|NWListener|NWBrowser|NWPathMonitor|NWEndpoint|CFNetwork|CFStream|CF(Read|Write)Stream|CFSocket|CFHost|getStreamsToHost|NSStream|contentsOf:|getaddrinfo|gethostbyname|(^|[^A-Za-z0-9_.])(socket|connect|sendto|recvfrom)[[:space:]]*\('
 forbidden_link='/(SwiftUI|SwiftUICore|Network|CFNetwork)\.framework/|libswift(SwiftUI|SwiftUICore|Network)\.dylib'
@@ -109,6 +143,7 @@ sources() {
     local folder file name status matches match module out
     work=$(mktemp -d)
     : > "$work/all"
+    : > "$work/dangling"
     for folder in "${folders[@]}"; do
         [ -d "$folder" ] || fail "folder not found: $folder"
         if ! find -L "$folder" -type f -print0 >> "$work/all" 2> "$work/find.txt"; then
@@ -116,13 +151,28 @@ sources() {
             head -n 20 "$work/find.txt" >&2
             exit 1
         fi
+        # With -L, a link that is still a link points nowhere (here): -type f
+        # skips it, but Xcode on another machine might compile what it names.
+        if ! find -L "$folder" -type l -print0 >> "$work/dangling" 2> "$work/find.txt"; then
+            echo "extension guard: FAIL: could not list the links in $folder:" >&2
+            head -n 20 "$work/find.txt" >&2
+            exit 1
+        fi
     done
     local files=() problems=0
+    while IFS= read -r -d '' file; do
+        echo "extension guard: FAIL: $file is a symbolic link that points nowhere here, so the guard cannot read" \
+            "what it names" >&2
+        problems=$((problems + 1))
+    done < "$work/dangling"
     while IFS= read -r -d '' file; do
         name=$(basename "$file")
         case "$name" in
             *.swift) files+=("$file") ;;
             Info.plist) ;;
+            # Finder's folder metadata: never compiled, ignored by git, and
+            # written by macOS into any folder opened in Finder.
+            .DS_Store) ;;
             *)
                 echo "extension guard: FAIL: $file is not a Swift file. The extension's folders hold Swift files" >&2
                 echo "  only (and an Info.plist), so that every source they compile is read by this guard." >&2
@@ -205,32 +255,104 @@ project() {
     command -v plutil > /dev/null 2>&1 || fail "plutil is not available"
     work=$(mktemp -d)
     xcodegen dump --type json --spec "$spec" > "$work/dump.json" || fail "xcodegen could not read $spec"
-    # check_key <key path> <expected JSON>. Both sides are compared as XML
-    # property lists, whose dictionary keys plutil writes sorted: XcodeGen's
-    # JSON lists a dictionary's keys in a different order from run to run.
-    check_key() {
-        local got want shown
-        printf '%s' "$2" > "$work/want.json"
-        want=$(plutil -convert xml1 -o - "$work/want.json") || fail "the guard's own expected value for $1 is not JSON"
-        if got=$(plutil -extract "$1" xml1 -o - "$work/dump.json" 2> /dev/null); then
-            shown=$(plutil -extract "$1" json -o - "$work/dump.json")
+    plutil -convert xml1 -o "$work/dump.plist" "$work/dump.json" || fail "xcodegen's dump of $spec is not JSON"
+    local problems=0
+
+    # The keys of the dictionary at key path $2 in property list $1 (the whole
+    # list if $2 is empty), one per line; nothing if there is none. plutil
+    # writes a dictionary's own keys one tab in.
+    keys_of() {
+        local xml
+        if [ -z "$2" ]; then
+            xml=$(cat "$1")
         else
-            got="(missing)"
-            shown="(missing)"
+            xml=$(plutil -extract "$2" xml1 -o - "$1" 2> /dev/null) || return 0
         fi
-        if [ "$got" != "$want" ]; then
-            echo "extension guard: FAIL: project.yml $1 is $shown, not $2." >&2
-            echo "  The extension guard scans exactly these sources (scripts/extension-guard.sh sources); a new" >&2
-            echo "  source path or dependency for the extension or KeyboardKit means changing the guard too." >&2
-            exit 1
-        fi
+        printf '%s\n' "$xml" | sed -n 's/^	<key>\(.*\)<\/key>$/\1/p'
     }
-    check_key targets.SpeakboardKeyboard.sources '[{"path":"Apple\/Keyboard","excludes":["Info.plist"]}]'
-    check_key targets.KeyboardKit.sources '[{"path":"Apple\/KeyboardKit"}]'
-    check_key targets.SpeakboardKeyboard.dependencies '[{"embed":false,"target":"KeyboardKit"}]'
-    check_key targets.KeyboardKit.dependencies '[{"package":"Speakboard","product":"SpeakboardCore"}]'
-    echo "extension guard: OK (project.yml: the extension's sources are Apple/Keyboard, KeyboardKit's" \
-        "Apple/KeyboardKit, and their only dependencies are KeyboardKit and the core)"
+    # The value at key path $2 in property list $1, as XML (compared) or JSON
+    # (shown), or "(missing)". XML, because plutil writes a dictionary's keys
+    # sorted there, while XcodeGen's JSON lists them in a different order from
+    # run to run.
+    value_xml() { plutil -extract "$2" xml1 -o - "$1" 2> /dev/null || echo "(missing)"; }
+    value_json() { plutil -extract "$2" json -o - "$1" 2> /dev/null || echo "(missing)"; }
+
+    # compare_entry <key path> <expected JSON object>: every key of the entry
+    # at the key path, and every expected key, must hold exactly the expected
+    # value. A key the guard does not expect fails, named.
+    compare_entry() {
+        local path="$1" key got want
+        printf '%s' "$2" > "$work/want.json"
+        plutil -convert xml1 -o "$work/want.plist" "$work/want.json" \
+            || fail "the guard's own expected value for $path is not JSON"
+        if [ "$(value_xml "$work/dump.plist" "$path")" = "(missing)" ]; then
+            echo "extension guard: FAIL: project.yml has no $path" >&2
+            problems=$((problems + 1))
+            return
+        fi
+        for key in $( (keys_of "$work/dump.plist" "$path"; keys_of "$work/want.plist" "") | sort -u); do
+            got=$(value_xml "$work/dump.plist" "$path.$key")
+            want=$(value_xml "$work/want.plist" "$key")
+            if [ "$got" != "$want" ]; then
+                if [ "$want" = "(missing)" ]; then
+                    echo "extension guard: FAIL: project.yml $path.$key is set ($(value_json "$work/dump.plist" "$path.$key")):" \
+                        "a key the guard does not expect there" >&2
+                else
+                    echo "extension guard: FAIL: project.yml $path.$key is $(value_json "$work/dump.plist" "$path.$key")," \
+                        "not $(value_json "$work/want.plist" "$key")" >&2
+                fi
+                problems=$((problems + 1))
+            fi
+        done
+    }
+
+    # 1. The top level holds only the keys this project uses. Another key
+    #    (configFiles, fileGroups, projectReferences, targetTemplates left
+    #    unresolved, ...) is not read below, so it fails, named.
+    local key
+    for key in $(keys_of "$work/dump.plist" ""); do
+        case " $top_level_keys " in
+            *" $key "*) ;;
+            *)
+                echo "extension guard: FAIL: project.yml has the top-level key $key, which the guard does not know" >&2
+                problems=$((problems + 1))
+                ;;
+        esac
+    done
+    # 2. Project-wide settings apply to every target, the extension included.
+    #    Only `base` is allowed, holding only the setting names below; their
+    #    values are free (the bundle identifier is the owner's to choose).
+    for key in $(keys_of "$work/dump.plist" settings); do
+        if [ "$key" != base ]; then
+            echo "extension guard: FAIL: project.yml settings.$key is set: only settings.base is allowed" >&2
+            problems=$((problems + 1))
+        fi
+    done
+    for key in $(keys_of "$work/dump.plist" settings.base); do
+        case " $project_setting_names " in
+            *" $key "*) ;;
+            *)
+                echo "extension guard: FAIL: project.yml settings.base.$key is set: a project-wide setting the guard" \
+                    "does not allow (it would apply to the extension too)" >&2
+                problems=$((problems + 1))
+                ;;
+        esac
+    done
+    # 3. The core comes from this repo's own package, which the core guards read.
+    compare_entry packages.Speakboard '{"path":"."}'
+    # 4. The extension and KeyboardKit, whole: sources, dependencies, settings,
+    #    type and platform, and no other key (build tool plugins, script phases,
+    #    build rules, config files, ...).
+    compare_entry targets.SpeakboardKeyboard "$expected_extension"
+    compare_entry targets.KeyboardKit "$expected_keyboardkit"
+
+    if [ "$problems" -ne 0 ]; then
+        echo "The extension guard scans exactly the extension's and KeyboardKit's own folders and the core. A change" >&2
+        echo "to how project.yml builds them is a change to the guard too: scripts/extension-guard.sh project." >&2
+        exit 1
+    fi
+    echo "extension guard: OK (project.yml: the extension and KeyboardKit are exactly as the guard expects, the" \
+        "project-wide settings and top-level keys are ones it knows, and the core is this repo's package)"
 }
 
 # Whether $1 starts with a Mach-O magic number: thin 32- or 64-bit, or
