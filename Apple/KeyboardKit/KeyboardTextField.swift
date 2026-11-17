@@ -90,10 +90,15 @@ public final class DocumentProxyField: KeyboardTextField {
     }
 
     /// See `KeyboardTextField`. Read by key-value coding, as an optional: Swift imports the proxy's
-    /// `documentIdentifier` as a non-optional `UUID`, and reading it that way traps if the proxy has none yet (before
-    /// a document is connected), which would crash the extension.
+    /// `documentIdentifier` as a non-optional `UUID`, and reading it that way traps if the proxy has none, which
+    /// crashed the extension in the simulator (KEY-62): it had none when the keyboard appeared. It checks the proxy
+    /// answers the property first, so a proxy class without it gives nil rather than an exception. A non-nil value
+    /// has never been observed: the extension logs only whether there was one when it appeared, and there was not.
     public var documentIdentifier: UUID? {
-        (proxy as? NSObject)?.value(forKey: "documentIdentifier") as? UUID
+        guard let object = proxy as? NSObject,
+            object.responds(to: #selector(getter: UITextDocumentProxy.documentIdentifier))
+        else { return nil }
+        return object.value(forKey: "documentIdentifier") as? UUID
     }
 
     /// See `KeyboardTextField`.

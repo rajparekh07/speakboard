@@ -3,41 +3,30 @@ import XCTest
 
 // The typing proof through the real keyboard extension (KEY-62). It needs a simulator where Speakboard is enabled,
 // has Full Access and is the current keyboard, as scripts/sim-keyboard.sh arranges; the unit test step does not run
-// it. It launches the app with its field focused, finds the keyboard on screen, taps key centres computed from the
-// core's layout, and reads the field back. SPEAKBOARD_APPEARANCE (set by the script through TEST_RUNNER_) names the
-// screenshots.
+// it. It launches the app with its field focused, brings Speakboard up, finds it by its view's accessibility
+// identifier, taps key centres computed from the core's layout, and reads the field back: "hi", a double space (a
+// double tap on the space bar), "ok" and a delete give "Hi. O", and after a double tap on Shift, "ab" types "AB".
+// SPEAKBOARD_APPEARANCE (set by the script through TEST_RUNNER_) names the screenshots.
 
-/// Where the keyboard is on screen, and how to tap one of its keys.
+/// The view's accessibility identifier: KeyboardView.accessibilityID (KeyboardKit is not linked into this target).
+let keyboardID = "SpeakboardKeyboard"
+
+/// Where Speakboard's keyboard is on screen, and how to tap one of its keys. It is found by its view's accessibility
+/// identifier, or the test fails: a proof that our keyboard typed cannot tap a keyboard it has not found (on 9ce7fbf a
+/// fallback to `app.keyboards` typed on Apple's keyboard).
 @MainActor
 struct KeyboardOnScreen {
     let app: XCUIApplication
     let layout: KeyboardLayout
     let origin: CGPoint
-    let foundBy: String
 
-    init(app: XCUIApplication) throws {
+    init(app: XCUIApplication, layout: KeyboardLayout) throws {
         self.app = app
-        let window = app.windows.firstMatch.frame
-        let match = DeviceClass.match(screenWidth: Double(window.width), screenHeight: Double(window.height))
-        let layout = try XCTUnwrap(
-            KeyboardLayout(locale: .english, deviceClass: match.deviceClass, orientation: .portrait))
         self.layout = layout
-        let view = app.descendants(matching: .any)["SpeakboardKeyboard"]
-        let keyboard = app.keyboards.firstMatch
-        if view.waitForExistence(timeout: 5) {
-            origin = view.frame.origin
-            foundBy = "its accessibility identifier, frame \(view.frame)"
-        } else if keyboard.exists, abs(Double(keyboard.frame.height) - layout.size.height) < 2 {
-            origin = keyboard.frame.origin
-            foundBy = "app.keyboards, frame \(keyboard.frame), our layout's height"
-        } else {
-            // The keyboard's view sits above the strip iOS draws below it on Face ID iPhones (systemStrip.height).
-            let metrics = layout.metrics
-            let strip = match.deviceClass.hasHomeIndicator ? metrics.systemStripHeight.value : 0
-            origin = CGPoint(x: 0, y: Double(window.height) - strip - layout.size.height)
-            foundBy = "the screen and the core's heights (no element found)"
-        }
-        print("speakboard-ui: keyboard found by \(foundBy); device \(match.deviceClass.rawValue); window \(window)")
+        let view = app.descendants(matching: .any)[keyboardID]
+        XCTAssertTrue(view.waitForExistence(timeout: 10), "Speakboard's keyboard view is not on screen")
+        origin = view.frame.origin
+        print("speakboard-ui: keyboard found by its accessibility identifier, frame \(view.frame)")
     }
 
     func coordinate(_ kind: KeyKind) throws -> XCUICoordinate {
@@ -56,26 +45,31 @@ struct KeyboardOnScreen {
             if character == " " {
                 try tap(.space)
             } else {
-                try tap(.letter(try XCTUnwrap(character.unicodeScalars.first)))
+                try tap(.letter(try XCTUnwrap(character.lowercased().unicodeScalars.first)))
             }
         }
     }
 }
 
-/// Makes Speakboard the keyboard on screen. `xcodebuild test` reinstalls the app, and after that the system shows
-/// Apple's keyboard (seen on CI: its keys in the accessibility tree, and its 226 pt frame), so this taps the system's
-/// next-keyboard button until Apple's key elements are gone and a keyboard of our layout's height is up. A custom
-/// keyboard's view exposes no key elements; Apple's does.
+/// Makes Speakboard the keyboard on screen. `xcodebuild test` reinstalls the app, and after that the system may show
+/// Apple's keyboard (seen on CI: its keys in the accessibility tree, and its 226 pt frame). This waits for a keyboard
+/// to be up at all, then, while Apple's key elements are on screen and ours is not, taps the system's next-keyboard
+/// button. A custom keyboard's view exposes no key elements; Apple's does.
 @MainActor
-func bringUpSpeakboard(_ app: XCUIApplication, height: Double) {
+func bringUpSpeakboard(_ app: XCUIApplication) {
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let ours = app.descendants(matching: .any)[keyboardID]
     for attempt in 0..<6 {
-        let keyboard = app.keyboards.firstMatch
-        let frame = keyboard.exists ? keyboard.frame : .zero
+        if ours.waitForExistence(timeout: 5) {
+            print("speakboard-ui: attempt \(attempt): Speakboard is up")
+            return
+        }
         let appleKeys = app.keys.count
-        print("speakboard-ui: attempt \(attempt): \(appleKeys) key elements, keyboard frame \(frame)")
-        if appleKeys == 0, abs(Double(frame.height) - height) < 2 { return }
-        if app.descendants(matching: .any)["SpeakboardKeyboard"].exists { return }
+        print("speakboard-ui: attempt \(attempt): Speakboard not found; \(appleKeys) of Apple's key elements")
+        guard appleKeys > 0 else {
+            // No keyboard yet, or one without key elements that is not ours: wait, do not cycle blind.
+            continue
+        }
         let candidates = [
             app.buttons["Next keyboard"], springboard.buttons["Next keyboard"],
             app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'next keyboard'")).firstMatch,
@@ -86,7 +80,6 @@ func bringUpSpeakboard(_ app: XCUIApplication, height: Double) {
             break
         }
         next.tap()
-        sleep(2)
     }
     XCTFail("Speakboard did not come up: the keyboard on screen is not ours (see the speakboard-ui lines)")
 }
@@ -109,15 +102,19 @@ final class KeyboardExtensionUITests: XCTestCase {
     }
 
     @MainActor
-    func waitForValue(_ field: XCUIElement, _ expected: String) {
+    func expectValue(_ field: XCUIElement, _ expected: String, _ what: String) {
         let predicate = NSPredicate(format: "value == %@", expected)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: field)
         let result = XCTWaiter().wait(for: [expectation], timeout: 10)
-        XCTAssertEqual(result, .completed, "the field reads \(String(describing: field.value)), not \(expected)")
+        print("speakboard-ui: \(what): the field reads \(String(describing: field.value))")
+        XCTAssertEqual(
+            result, .completed, "\(what): the field reads \(String(describing: field.value)), not \(expected)")
     }
 
-    /// Types "hi ok" and a delete through the extension: "Hi o", with Shift turned on by the field's sentence
-    /// capitalisation for the first letter. Then shows Shift on and caps lock, for the screenshots.
+    /// Through the extension: "hi" with Shift on for the first letter (sentence capitalisation), a double space as a
+    /// double tap on the space bar (a full stop, which reads the proxy's context right after the keyboard's own
+    /// insert), "ok" (Shift on again after the full stop), a delete; then Shift on, and caps lock as a double tap on
+    /// Shift, checked by typing "ab" as "AB" and deleting it.
     @MainActor
     func testTypesThroughTheExtension() throws {
         let app = XCUIApplication()
@@ -125,24 +122,34 @@ final class KeyboardExtensionUITests: XCTestCase {
         app.launch()
         let field = app.textFields["TryField"]
         XCTAssertTrue(field.waitForExistence(timeout: 20), "the app's field")
-        let match = DeviceClass.match(
-            screenWidth: Double(app.windows.firstMatch.frame.width),
-            screenHeight: Double(app.windows.firstMatch.frame.height))
-        let height = try XCTUnwrap(
-            KeyboardLayout(locale: .english, deviceClass: match.deviceClass, orientation: .portrait)
-        ).size.height
-        bringUpSpeakboard(app, height: height)
-        let keyboard = try KeyboardOnScreen(app: app)
+        let window = app.windows.firstMatch.frame
+        let match = DeviceClass.match(screenWidth: Double(window.width), screenHeight: Double(window.height))
+        let layout = try XCTUnwrap(
+            KeyboardLayout(locale: .english, deviceClass: match.deviceClass, orientation: .portrait))
+        print("speakboard-ui: device \(match.deviceClass.rawValue); window \(window)")
+        bringUpSpeakboard(app)
+        let keyboard = try KeyboardOnScreen(app: app, layout: layout)
         screenshot("shift-auto")
-        try keyboard.type("hi ok")
+
+        try keyboard.type("hi")
+        expectValue(field, "Hi", "after hi")
+        try keyboard.coordinate(.space).doubleTap()
+        expectValue(field, "Hi. ", "after the double tap on space")
+        try keyboard.type("ok")
         try keyboard.tap(.delete)
-        waitForValue(field, "Hi o")
+        expectValue(field, "Hi. O", "after ok and a delete")
         screenshot("shift-off")
+
         try keyboard.tap(.shift)
         screenshot("shift-on")
         try keyboard.tap(.shift)
+        sleep(1)
         try keyboard.coordinate(.shift).doubleTap()
         screenshot("caps-lock")
-        print("speakboard-ui: after the caps lock double tap the field reads \(String(describing: field.value))")
+        try keyboard.type("ab")
+        expectValue(field, "Hi. OAB", "after the double tap on Shift and ab")
+        try keyboard.tap(.delete)
+        try keyboard.tap(.delete)
+        expectValue(field, "Hi. O", "after two deletes")
     }
 }

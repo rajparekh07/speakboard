@@ -47,8 +47,21 @@ final class KeyboardViewController: UIInputViewController {
         log.notice("speakboard-session appeared document=\(document, privacy: .public)")
     }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // A Delete hold must not go on deleting after the keyboard leaves, if UIKit does not cancel the touch.
+        typing?.endTouches(at: ProcessInfo.processInfo.systemUptime)
+    }
+
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
+        typing?.textDidChange(at: ProcessInfo.processInfo.systemUptime)
+    }
+
+    // The cursor moving is a context change too (the engine reads the text before it). Sending one more is safe:
+    // `.contextChanged` may be sent as often as the caller likes.
+    override func selectionDidChange(_ textInput: UITextInput?) {
+        super.selectionDidChange(textInput)
         typing?.textDidChange(at: ProcessInfo.processInfo.systemUptime)
     }
 

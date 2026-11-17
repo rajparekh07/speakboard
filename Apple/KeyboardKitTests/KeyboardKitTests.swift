@@ -214,6 +214,38 @@ struct KeyboardTypingTests {
         #expect(rig.scheduler.requested == nil)
     }
 
+    @Test("An identifier that arrives after the keyboard keeps the session: caps lock stays on; another one resets it")
+    func lateDocumentIdentifier() throws {
+        let rig = try Rig(autocapitalization: .none)
+        rig.field.documentIdentifier = nil
+        rig.typing.beginFieldSession(at: rig.clock)
+        try rig.tap(.shift)
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .locked)
+        rig.field.documentIdentifier = UUID()
+        rig.typing.textDidChange(at: rig.clock)
+        #expect(rig.typing.shiftState == .locked, "the first identifier is this session's: no new engine")
+        try rig.type("a")
+        #expect(rig.field.text == "A")
+        rig.field.documentIdentifier = UUID()
+        rig.typing.textDidChange(at: rig.clock)
+        #expect(rig.typing.shiftState == .off, "another identifier is another field: a fresh engine")
+    }
+
+    @Test("The keyboard going away ends a delete hold and types nothing for a held letter")
+    func endTouches() throws {
+        let rig = try Rig(autocapitalization: .none, text: "abc")
+        rig.view.touchDown(1, at: try rig.point(.delete), time: rig.clock)
+        #expect(rig.field.text == "ab")
+        #expect(rig.scheduler.requested != nil)
+        rig.typing.endTouches(at: rig.clock + 0.1)
+        #expect(rig.scheduler.requested == nil)
+        rig.view.touchDown(2, at: try rig.point(rig.letter("q")), time: rig.clock + 0.2)
+        rig.typing.endTouches(at: rig.clock + 0.3)
+        rig.view.touchUp(2, at: try rig.point(rig.letter("q")), time: rig.clock + 0.4)
+        #expect(rig.field.text == "ab")
+    }
+
     @Test("A finger that slides from one letter to another types the one it lifts on")
     func slide() throws {
         let rig = try Rig(autocapitalization: .none)

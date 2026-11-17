@@ -82,14 +82,25 @@ public final class KeyboardTyping {
         send(.contextChanged, at: time)
     }
 
-    /// The field's text or selection changed outside the keyboard (`textDidChange`). Another document means another
-    /// field session.
+    /// The field's text or selection changed outside the keyboard (`textDidChange`, `selectionDidChange`). Another
+    /// document means another field session, but only when one known identifier changes to another: the proxy has
+    /// none when the keyboard appears (seen in the simulator), so the first identifier to arrive is taken as this
+    /// session's, keeping the engine and the user's Shift, and the change is a context change.
     public func textDidChange(at time: TimeInterval) {
-        if field.documentIdentifier != sessionDocument {
+        let current = field.documentIdentifier
+        if let current, let sessionDocument, current != sessionDocument {
             beginFieldSession(at: time)
-        } else {
-            send(.contextChanged, at: time)
+            return
         }
+        if sessionDocument == nil { sessionDocument = current }
+        send(.contextChanged, at: time)
+    }
+
+    /// The keyboard is going away: the finger being followed types nothing more, and a Delete hold ends, as if the
+    /// touch were cancelled, in case UIKit does not cancel it.
+    public func endTouches(at time: TimeInterval) {
+        if activeTouch != nil { finishActiveTouch(commit: false, at: time) }
+        scheduler.requestTick(at: nil, for: self)
     }
 
     /// A finger landed at `point`. `touch` names the finger until it lifts.
