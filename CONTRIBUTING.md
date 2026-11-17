@@ -16,10 +16,11 @@ make check
 2. **Docker ready.** It first runs the self-test of its stale containerd pid check, which needs no daemon. It starts `dockerd` if it is not running, and pulls the Swift image if it is missing.
 3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` is a regular target, declares no dependencies and sets no `path`, `sources`, plugins or build settings of any kind (`swiftSettings`, `cSettings`, `cxxSettings`, `linkerSettings`: so no unsafe flags, defines or language mode), that the package sets no `swiftLanguageModes` and its tools version is 6.x (below 6.0 the core would build as Swift 5, and a later major version may default to a later mode than the imports guard reads), and that the `SpeakboardCore` product holds only that target. Those are ways to compile code into the core, or ship code beside it, from outside the folder the core guard reads, or to build the core in a language mode other than the Swift 6 the imports guard reads it in. It does not close every way: it reads only those keys of the package, the target and the product. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
 4. **Core imports guard.** It first runs its own self-test. Then it fails if any Swift file under `Sources/SpeakboardCore` contains conditional compilation (`#if`, `#elseif`, `#else`, `#endif`), naming the file and line. The compiler reports imports only in code it compiles, and which branches it compiles depends on the platform, the target and the build's defines (`swift build` adds `DEBUG` and `SWIFT_PACKAGE`), so the core has no branches at all. This step reads the text, so an `#if` in a comment or a string fails too, on purpose. Apple-only code goes under `Apple/`. Then it asks the compiler which modules each file imports (`swift-frontend -emit-imported-modules`, inside Docker) and fails, naming the file and the module, if any is not `Foundation`. Reading the compiler's answer rather than the text means every spelling of an import counts, and with no conditional compilation the compiler sees every import. It reads every file as Swift 6, which step 3 makes the only mode the core builds in. It fails closed: a failing `find`, a missing frontend, a non-zero exit (a syntax error, or a toolchain that drops the flag) or no output file fails it.
-5. **Design tokens.** It checks that the pinned token export in `DesignTokens/` has the SHA-256 that `DesignTokens/tokens.pin` records, then runs the generator and fails if `Sources/SpeakboardCore/Layout/GeneratedMetrics.swift` differs from what it makes. See "Design tokens" below.
-6. **Build.** `swift build`
-7. **Tests.** `swift test`
-8. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests` and `scripts`.
+5. **Keyboard extension guard.** It first runs its own self-test. Then it fails if a Swift file in `Apple/Keyboard` or `Apple/KeyboardKit` (the code linked into the extension) imports SwiftUI, Network or FoundationNetworking, or names `URLSession`, `NWConnection`, `NWListener`, `NWBrowser`, `CFStream`, `CFSocket` or a BSD socket call. It reads the text, so a mention in a comment fails too. It runs on the host, with no Swift. macOS CI also checks the built extension's binaries with `otool -L` (`scripts/extension-guard.sh binary`).
+6. **Design tokens.** It checks that the pinned token export in `DesignTokens/` has the SHA-256 that `DesignTokens/tokens.pin` records, then runs the generator and fails if `Sources/SpeakboardCore/Layout/GeneratedMetrics.swift` differs from what it makes. See "Design tokens" below.
+7. **Build.** `swift build`
+8. **Tests.** `swift test`
+9. **Format check.** `swift format lint --strict` on `Package.swift`, `Sources`, `Tests`, `scripts` and `Apple`. swift-format reads syntax only, so the Apple code is linted in the Linux image too, without UIKit.
 
 It ends with `make check: OK`.
 
@@ -45,11 +46,11 @@ make check-native
 
 It needs Xcode, and Xcode's toolchain must be the active one. With only the Command Line Tools (their Swift is 6.3.3), the tests fail to compile with `no such module 'Testing'`. Check with `xcode-select -p`, which must print a path inside Xcode, and select Xcode with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` if it does not. The scripts are written for the bash 3.2 at `/bin/bash` and the BSD tools macOS ships, so nothing needs installing from Homebrew.
 
-It first checks that every tool the steps use is there (`swift`, `swift format`, the compiler frontend, a SHA-256 tool, and the rest) and fails, naming the tool, if one is not: a missing tool is a failure, never a skip. On macOS it finds the compiler frontend for the core imports guard with `xcrun -f swift-frontend`, and fails if the Command Line Tools are selected. It also fails unless the active Swift is the version the Makefile pins in `SWIFT_TAG` (6.4.2 today; Xcode 27.2 has it), because several of the guards' facts were checked with that version. After an Xcode update that brings another Swift, either select a toolchain with the pinned version, or change `SWIFT_TAG` in its own commit, which moves `make check` and `make check-native` together. Then it runs steps 1 and 3 to 8 above, each guard with its self-test, and ends with `make check-native: OK`. Step 2 is not part of it: it looks after the Docker daemon on a Linux host. (Its self-test says it is skipped on a host with no `/proc`, such as macOS.)
+It first checks that every tool the steps use is there (`swift`, `swift format`, the compiler frontend, a SHA-256 tool, and the rest) and fails, naming the tool, if one is not: a missing tool is a failure, never a skip. On macOS it finds the compiler frontend for the core imports guard with `xcrun -f swift-frontend`, and fails if the Command Line Tools are selected. It also fails unless the active Swift is the version the Makefile pins in `SWIFT_TAG` (6.4.2 today; Xcode 27.2 has it), because several of the guards' facts were checked with that version. After an Xcode update that brings another Swift, either select a toolchain with the pinned version, or change `SWIFT_TAG` in its own commit, which moves `make check` and `make check-native` together. Then it runs steps 1 and 3 to 9 above, each guard with its self-test, and ends with `make check-native: OK`. Step 2 is not part of it: it looks after the Docker daemon on a Linux host. (Its self-test says it is skipped on a host with no `/proc`, such as macOS.)
 
-On macOS, `swift test` skips the allocation tests, with a message: there is no heap-allocation counter for macOS yet (KEY-8). Expect 105 of 108 tests to pass and 3 to be skipped. They run only on Linux (`make check`, or `make check-native` there).
+On macOS, `swift test` skips the allocation tests, with a message: there is no heap-allocation counter for macOS (KEY-8 found none that is sound with public API). Expect 105 of 108 tests to pass and 3 to be skipped. They run only on Linux (`make check`, or `make check-native` there).
 
-The step targets take `NATIVE=1` to run one step on the host too: `guard`, `guard-deps`, `guard-imports`, `metrics-check`, `metrics`, `build`, `test`, `format-check` and `format`, for example `make NATIVE=1 guard-imports`. `make check` refuses `NATIVE=1`, whether it comes from the command line or the environment, and every variable its steps use (`RUN`, `DOCKER_READY`, `SWIFT_TAG`, `CHECK_STEPS` and the rest) is declared `override` in the `Makefile`, so a value for one on the command line is ignored. Neither stops an edit to the `Makefile` itself. `make check-native` also works on Linux with Swift installed, but `make check` in Docker stays the check every ticket must pass.
+The step targets take `NATIVE=1` to run one step on the host too: `guard-deps`, `guard-imports`, `metrics-check`, `metrics`, `build`, `test`, `format-check` and `format`, for example `make NATIVE=1 guard-imports` (`guard` and `guard-extension` always run on the host). `make check` refuses `NATIVE=1`, whether it comes from the command line or the environment, and every variable its steps use (`RUN`, `DOCKER_READY`, `SWIFT_TAG`, `CHECK_STEPS` and the rest) is declared `override` in the `Makefile`, so a value for one on the command line is ignored. Neither stops an edit to the `Makefile` itself. `make check-native` also works on Linux with Swift installed, but `make check` in Docker stays the check every ticket must pass.
 
 ### Other targets
 
@@ -59,6 +60,7 @@ The step targets take `NATIVE=1` to run one step on the host too: `guard`, `guar
 | `make guard` | The core guard and its self-test only. Needs no Docker |
 | `make guard-deps` | The core dependency guard and its self-test only |
 | `make guard-imports` | The core imports guard and its self-test only |
+| `make guard-extension` | The keyboard extension guard and its self-test only. Needs no Docker |
 | `make metrics-check` | The design token step only |
 | `make metrics` | Regenerates the metrics tables from the pinned token export |
 | `make build` | `swift build` in Docker |
@@ -109,11 +111,34 @@ Every testing report names the rung that verified the work.
 | Rung | Where | What it can prove | Status today |
 | -- | -- | -- | -- |
 | 1. Linux Swift | The agent's container, Swift in Docker | The core: build, unit tests, formatting | Working. This is `make check` |
-| 2. macOS CI | GitHub Actions macOS runners | The Xcode project builds, simulator tests, screenshots | Not set up. It needs the Xcode project |
-| 3. The owner's Mac | Remote Control from the Claude desktop app | Interactive Xcode, the simulator, Instruments | Working for the core's checks: `make check-native` runs them natively there, by hand (KEY-57), except the 3 heap-allocation tests, which skip on macOS until there is a macOS allocation counter (KEY-8) and run only on Linux (`make check`, or `make check-native` there). Nothing else runs there yet |
+| 2. macOS CI | GitHub Actions macOS runners | The Xcode project builds, simulator tests, screenshots | Working (KEY-8): `.github/workflows/macos.yml` on the `xcode-27` runner, Xcode 27.2, on every push. See "macOS CI" below |
+| 3. The owner's Mac | Remote Control from the Claude desktop app | Interactive Xcode, the simulator, Instruments | Working: Xcode 27.2 and the iOS 27.2 simulator. `make check-native` runs the core's checks there (KEY-57), and the Xcode project builds and runs there as on macOS CI (KEY-8). The 3 heap-allocation tests skip on macOS: there is no macOS allocation counter, so they run only on Linux (`make check`, or `make check-native` there) |
 | 4. A real iPhone | TestFlight | Latency, memory, battery, haptics, the app hop, the microphone. The only rung that proves a budget | No developer account or test iPhone yet |
 
 Rung 1 also runs on GitHub. Every push to the working branch or to `main` runs `make check` on a GitHub-hosted Linux runner (`.github/workflows/linux.yml`), and each run uploads its log as the artifact `make-check-log`. Still run `make check` yourself before you push.
+
+### macOS CI
+
+Every push to the working branch or to `main` also runs `.github/workflows/macos.yml` on GitHub's `xcode-27` runner. It selects Xcode 27.2, whose Swift is the pinned 6.4.2 (the runner's default is 27.1), prints what the runner has (Xcode installs and their Swift, SDKs, simulator runtimes and devices), and then:
+
+1. `make check-native`.
+2. Installs XcodeGen from its release zip, checked against a pinned SHA-256, and generates the project. It fails if generating leaves any file git would see.
+3. Builds the app and the keyboard extension for the iPhone 18 Pro simulator, iOS 27.2.
+4. `scripts/extension-guard.sh binary` on the built extension.
+5. The unit tests (`KeyboardKitTests`).
+6. `scripts/sim-keyboard.sh`: a fresh simulator, a screenshot of the keyboard's view in the app's harness, then the keyboard extension enabled with Full Access and shown in the app's text field, with a second screenshot. It fails unless the extension itself logs that it ran with Full Access. How it enables the keyboard is in the script.
+
+It uploads the screenshots and logs as the artifact `macos-screenshots-and-logs`. To run the same on a Mac:
+
+```sh
+xcodegen generate
+xcodebuild -project Speakboard.xcodeproj -scheme Speakboard \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.2' -derivedDataPath .build/xcode test
+scripts/sim-keyboard.sh .build/xcode/Build/Products/Debug-iphonesimulator/Speakboard.app \
+  "iPhone 18 Pro" com.apple.CoreSimulator.SimRuntime.iOS-27-2 .build/screenshots
+```
+
+The bundle identifiers in `project.yml` are placeholders until the owner has an Apple Developer account. Simulator builds need no signing, and no team is set.
 
 To read a run, read its job log with the GitHub job-log tool (`get_job_logs`). To find the job, list the branch's runs and match the head SHA, then list that run's jobs; for a red run, the job-log tool takes the run id with its failed-only option. The log holds the full `make check` output. You can list a run's artifacts, but you cannot download their contents from a session until the owner resolves KEY-54. Do not try, and do not ask the owner for a network change for it.
 
@@ -134,18 +159,22 @@ Tests/AllocationCounter/   test support: counts heap allocations (C, Linux), for
 DesignTokens/              the pinned design token export the metrics tables come from
 scripts/                   the scripts behind make check, and the metrics generator
 Makefile                   make check
-.github/workflows/         CI: linux.yml runs make check on every push
+.github/workflows/         CI: linux.yml runs make check, macos.yml the Xcode build, tests and
+                           screenshots, on every push
+Apple/Keyboard/            the keyboard extension: UIKit and Core Animation only, no SwiftUI
+Apple/KeyboardKit/         linked into the extension (and the app's harness): its views, and
+                           the only Apple code that imports the core
+Apple/KeyboardKitTests/    unit tests for KeyboardKit, run in the simulator
+Apple/App/                 the containing app: SwiftUI
+project.yml                XcodeGen definition of the targets; the .xcodeproj is never committed
 ```
 
 These come later, with their own tickets:
 
 ```
-Apple/Keyboard/            the keyboard extension
-Apple/KeyboardKit/         linked into the extension: key rendering, haptics, IPC client
-Apple/App/                 the containing app
+Apple/KeyboardKit/         also: key rendering, haptics, IPC client
 Apple/AppServices/         linked into the app only: audio, speech engines, storage,
                            anything that may touch the network
-project.yml                XcodeGen definition of the targets
 Evals/                     typing and dictation evaluation sets
 ```
 

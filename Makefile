@@ -44,18 +44,20 @@ override DOCKER_READY := docker-ready
 override FRONTEND :=
 endif
 
-override FORMAT_PATHS := Package.swift Sources Tests scripts
+override FORMAT_PATHS := Package.swift Sources Tests scripts Apple
 
 # The steps of a check, in order, for both paths. On the Docker path every step
 # but guard needs docker-ready first, so make check runs guard, docker-ready,
 # guard-deps, and on.
-override CHECK_STEPS := guard guard-deps guard-imports metrics-check build test format-check
+override CHECK_STEPS := guard guard-deps guard-imports guard-extension metrics-check build test format-check
 
-.PHONY: check check-native native-tools docker-ready guard guard-deps guard-imports metrics-check metrics build \
+.PHONY: check check-native native-tools docker-ready guard guard-deps guard-imports guard-extension metrics-check \
+	metrics build \
 	test format-check format clean
 
-# check: everything a ticket must pass. The three core guards, the token pin and
-# the generated metrics tables, build, tests, format check.
+# check: everything a ticket must pass. The three core guards, the extension
+# guard, the token pin and the generated metrics tables, build, tests, format
+# check.
 check: $(CHECK_STEPS)
 	@echo "make check: OK"
 
@@ -96,6 +98,15 @@ guard-deps: $(DOCKER_READY)
 # self-test runs first, for the same reason.
 guard-imports: $(DOCKER_READY)
 	@$(RUN) bash -c '$(FRONTEND) scripts/core-imports-selftest.sh && scripts/core-imports-guard.sh'
+
+# guard-extension: the keyboard extension's sources (Apple/Keyboard and the
+# Apple/KeyboardKit code linked into it) import no SwiftUI and contain no
+# networking code. Text only, so it runs on the host on both paths, like guard.
+# The built extension's binaries are checked on macOS CI
+# (scripts/extension-guard.sh binary). The self-test runs first.
+guard-extension:
+	@scripts/extension-guard-selftest.sh
+	@scripts/extension-guard.sh sources
 
 # metrics-check: the pinned token export matches DesignTokens/tokens.pin, and the
 # committed metrics tables are exactly what the generator makes from it.
