@@ -42,11 +42,12 @@ public final class PlaceholderKeyboardView: UIView {
     /// points, the core's `keyboard.totalHeight`, or nil if the core has no English layout.
     @discardableResult
     public func update(screenWidth: Double, screenHeight: Double, hasFullAccess: Bool? = nil) -> Double? {
-        let (deviceClass, isExact) = DeviceClassResolver.resolve(width: screenWidth, height: screenHeight)
-        let orientation = DeviceClassResolver.orientation(width: screenWidth, height: screenHeight)
-        let layout = KeyboardLayout(locale: .english, deviceClass: deviceClass, orientation: orientation)
+        let match = DeviceClass.match(screenWidth: screenWidth, screenHeight: screenHeight)
+        let orientation = Orientation(screenWidth: screenWidth, screenHeight: screenHeight)
+        let layout = KeyboardLayout(locale: .english, deviceClass: match.deviceClass, orientation: orientation)
         self.layout = layout
-        lines = Self.lines(layout: layout, isExact: isExact, screenWidth: screenWidth, screenHeight: screenHeight)
+        lines = Self.lines(
+            layout: layout, isExact: match.isExact, screenWidth: screenWidth, screenHeight: screenHeight)
         if let hasFullAccess {
             lines.append("Full Access: \(hasFullAccess ? "on" : "off")")
         }

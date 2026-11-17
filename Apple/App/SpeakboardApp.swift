@@ -56,6 +56,8 @@ struct HarnessView: View {
         ProcessInfo.processInfo.arguments.contains("-SpeakboardHarness")
     }
 
+    // A starting value only: KeyboardViewRepresentable sets the core's height for this screen as soon as the
+    // view is in a window.
     @State private var keyboardHeight: CGFloat = 260
 
     var body: some View {

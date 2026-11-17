@@ -15,6 +15,8 @@ final class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         keyboardView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(keyboardView)
+        // A starting value only, until the view has a screen: viewWillLayoutSubviews replaces it with the core's
+        // keyboard.totalHeight for this device on the first layout pass, so any value would do here.
         let height = keyboardView.heightAnchor.constraint(equalToConstant: 260)
         // Below required, so the system's own constraints win while it sets the keyboard up.
         height.priority = UILayoutPriority(999)

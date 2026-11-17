@@ -6,7 +6,8 @@
 #   SpeakboardKeyboard the keyboard extension: UIKit and Core Animation only,
 #                      no SwiftUI, no networking code (ADR-0012, MANIFESTO.md)
 #   KeyboardKit       UIKit code linked into the extension (and the app's
-#                      harness): the only Apple target that imports the core
+#                      harness): the only target in the app or the extension
+#                      that imports the core (KeyboardKitTests imports it too)
 #   KeyboardKitTests  unit tests for KeyboardKit, run in the simulator
 #
 # The core (Sources/SpeakboardCore) comes in as the local Swift package at the

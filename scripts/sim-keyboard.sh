@@ -54,7 +54,7 @@ boot() {
     xcrun simctl bootstatus "$udid" -b > /dev/null
 }
 
-# Waits up to $2 seconds for a process whose command line contains $1.
+# Waits up to $2 seconds for a process whose command line matches the regex $1.
 wait_for_process() {
     local i=0
     while [ "$i" -lt "$2" ]; do
@@ -101,7 +101,11 @@ boot
 # 4. Focus the app's text field, so the system shows the current keyboard.
 start=$(date '+%Y-%m-%d %H:%M:%S')
 xcrun simctl launch "$udid" "$app_id" -SpeakboardFocusField > /dev/null
-if ! wait_for_process "SpeakboardKeyboard.appex" 30; then
+# Scoped to this simulator: the extension runs from this device's own folder
+# (.../CoreSimulator/Devices/$udid/data/...), so a Speakboard keyboard running in
+# another simulator on the host does not count. The extension's log line, read
+# from this simulator only, is the gate in any case.
+if ! wait_for_process "Devices/$udid/.*SpeakboardKeyboard\.appex" 30; then
     echo "sim-keyboard: FAIL: the keyboard extension did not start" >&2
     xcrun simctl io "$udid" screenshot "$out/keyboard.png" > /dev/null 2>&1 || true
     exit 1

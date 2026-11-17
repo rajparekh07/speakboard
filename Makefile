@@ -106,14 +106,15 @@ guard-deps: $(DOCKER_READY)
 guard-imports: $(DOCKER_READY)
 	@$(RUN) bash -c '$(FRONTEND) scripts/core-imports-selftest.sh && scripts/core-imports-guard.sh'
 
-# guard-extension: the keyboard extension's sources (Apple/Keyboard and the
-# Apple/KeyboardKit code linked into it) import no SwiftUI and contain no
-# networking code. Text only, so it runs on the host on both paths, like guard.
-# The built extension's binaries are checked on macOS CI
-# (scripts/extension-guard.sh binary). The self-test runs first.
-guard-extension:
-	@scripts/extension-guard-selftest.sh
-	@scripts/extension-guard.sh sources
+# guard-extension: the keyboard extension's folders (Apple/Keyboard and the
+# Apple/KeyboardKit code linked into it) hold only Swift files, with no
+# conditional compilation, importing only the modules the guard allows (as the
+# compiler reads the imports, so it needs the frontend, like guard-imports),
+# and naming no networking API (a text net, not a proof). See the guard's
+# header for what it cannot see. macOS CI also checks project.yml's sources
+# and the built extension's binaries. The self-test runs first.
+guard-extension: $(DOCKER_READY)
+	@$(RUN) bash -c '$(FRONTEND) scripts/extension-guard-selftest.sh && scripts/extension-guard.sh sources'
 
 # metrics-check: the pinned token export matches DesignTokens/tokens.pin, and the
 # committed metrics tables are exactly what the generator makes from it.

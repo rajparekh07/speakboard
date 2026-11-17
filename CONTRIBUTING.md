@@ -16,7 +16,7 @@ make check
 2. **Docker ready.** It first runs the self-test of its stale containerd pid check, which needs no daemon. It starts `dockerd` if it is not running, and pulls the Swift image if it is missing.
 3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` is a regular target, declares no dependencies and sets no `path`, `sources`, plugins or build settings of any kind (`swiftSettings`, `cSettings`, `cxxSettings`, `linkerSettings`: so no unsafe flags, defines or language mode), that the package sets no `swiftLanguageModes` and its tools version is 6.x (below 6.0 the core would build as Swift 5, and a later major version may default to a later mode than the imports guard reads), and that the `SpeakboardCore` product holds only that target. Those are ways to compile code into the core, or ship code beside it, from outside the folder the core guard reads, or to build the core in a language mode other than the Swift 6 the imports guard reads it in. It does not close every way: it reads only those keys of the package, the target and the product. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
 4. **Core imports guard.** It first runs its own self-test. Then it fails if any Swift file under `Sources/SpeakboardCore` contains conditional compilation (`#if`, `#elseif`, `#else`, `#endif`), naming the file and line. The compiler reports imports only in code it compiles, and which branches it compiles depends on the platform, the target and the build's defines (`swift build` adds `DEBUG` and `SWIFT_PACKAGE`), so the core has no branches at all. This step reads the text, so an `#if` in a comment or a string fails too, on purpose. Apple-only code goes under `Apple/`. Then it asks the compiler which modules each file imports (`swift-frontend -emit-imported-modules`, inside Docker) and fails, naming the file and the module, if any is not `Foundation`. Reading the compiler's answer rather than the text means every spelling of an import counts, and with no conditional compilation the compiler sees every import. It reads every file as Swift 6, which step 3 makes the only mode the core builds in. It fails closed: a failing `find`, a missing frontend, a non-zero exit (a syntax error, or a toolchain that drops the flag) or no output file fails it.
-5. **Keyboard extension guard.** It first runs its own self-test. Then it fails if a Swift file in `Apple/Keyboard` or `Apple/KeyboardKit` (the code linked into the extension) imports SwiftUI, Network or FoundationNetworking, or names `URLSession`, `NWConnection`, `NWListener`, `NWBrowser`, `CFStream`, `CFSocket` or a BSD socket call. It reads the text, so a mention in a comment fails too. It runs on the host, with no Swift. macOS CI also checks the built extension's binaries with `otool -L` (`scripts/extension-guard.sh binary`).
+5. **Keyboard extension guard.** It first runs its own self-test. Then, for `Apple/Keyboard` and `Apple/KeyboardKit` (the code linked into the extension), it fails on any file that is not a Swift file (an `Info.plist` aside), on conditional compilation (for the core's reason: the compiler reports imports only in branches it compiles), and on any import of a module outside an allowlist: Foundation, UIKit, QuartzCore, OSLog, SpeakboardCore and KeyboardKit, each justified in `scripts/extension-guard.sh`. It reads the imports with the compiler (`swift-frontend -emit-imported-modules`, inside Docker), so every spelling counts. As a second net, not a proof, it fails on networking names in the text (`URLSession` and its relatives, Network and CFNetwork types, Foundation streams, `contentsOf:`, BSD socket calls). On macOS CI (rung 2) the guard also checks that `project.yml` gives the extension and KeyboardKit exactly those folders and no other dependency, and that the built extension's binaries load no SwiftUI and no networking framework (`otool -L`). What none of this sees: networking through APIs the allowlist already lets in. `URLSession` reached without a new import, `Data(contentsOf:)` with a URL, `Stream` and BSD sockets live in Foundation and libSystem, so they add no import and no linked library; only the text net might catch them. The manifesto's full privacy gate is its own ticket, KEY-11 ("Privacy gate: no networking code in the keyboard extension").
 6. **Design tokens.** It checks that the pinned token export in `DesignTokens/` has the SHA-256 that `DesignTokens/tokens.pin` records, then runs the generator and fails if `Sources/SpeakboardCore/Layout/GeneratedMetrics.swift` differs from what it makes. See "Design tokens" below.
 7. **Build.** `swift build`
 8. **Tests.** `swift test`
@@ -60,7 +60,7 @@ The step targets take `NATIVE=1` to run one step on the host too: `guard-deps`, 
 | `make guard` | The core guard and its self-test only. Needs no Docker |
 | `make guard-deps` | The core dependency guard and its self-test only |
 | `make guard-imports` | The core imports guard and its self-test only |
-| `make guard-extension` | The keyboard extension guard and its self-test only. Needs no Docker |
+| `make guard-extension` | The keyboard extension guard (sources) and its self-test only |
 | `make metrics-check` | The design token step only |
 | `make metrics` | Regenerates the metrics tables from the pinned token export |
 | `make build` | `swift build` in Docker |
@@ -124,7 +124,7 @@ Every push to the working branch or to `main` also runs `.github/workflows/macos
 1. `make check-native`.
 2. Installs XcodeGen from its release zip, checked against a pinned SHA-256, and generates the project. It fails if generating leaves any file git would see.
 3. Builds the app and the keyboard extension for the iPhone 18 Pro simulator, iOS 27.2.
-4. `scripts/extension-guard.sh binary` on the built extension.
+4. The extension guard's macOS-only checks: its `project` self-test, `scripts/extension-guard.sh project project.yml` (the extension's and KeyboardKit's sources and dependencies are exactly what the guard scans) and `scripts/extension-guard.sh binary` on the built extension (no SwiftUI and no networking framework loaded).
 5. The unit tests (`KeyboardKitTests`).
 6. `scripts/sim-keyboard.sh`: a fresh simulator, a screenshot of the keyboard's view in the app's harness, then the keyboard extension enabled with Full Access and shown in the app's text field, with a second screenshot. It fails unless the extension itself logs that it ran with Full Access. How it enables the keyboard is in the script.
 
@@ -163,7 +163,8 @@ Makefile                   make check
                            screenshots, on every push
 Apple/Keyboard/            the keyboard extension: UIKit and Core Animation only, no SwiftUI
 Apple/KeyboardKit/         linked into the extension (and the app's harness): its views, and
-                           the only Apple code that imports the core
+                           the only app or extension code that imports the core
+                           (KeyboardKitTests imports it too)
 Apple/KeyboardKitTests/    unit tests for KeyboardKit, run in the simulator
 Apple/App/                 the containing app: SwiftUI
 project.yml                XcodeGen definition of the targets; the .xcodeproj is never committed

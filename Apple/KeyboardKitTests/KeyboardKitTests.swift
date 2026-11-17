@@ -3,31 +3,9 @@ import SpeakboardCore
 import Testing
 import UIKit
 
-@Suite("KeyboardKit: device classes")
-struct DeviceClassResolverTests {
-    @Test("Every class in the export resolves to itself, in both orientations", arguments: DeviceClass.allCases)
-    func exact(deviceClass: DeviceClass) {
-        let portrait = DeviceClassResolver.resolve(width: deviceClass.screenWidth, height: deviceClass.screenHeight)
-        #expect(portrait.deviceClass == deviceClass)
-        #expect(portrait.isExact)
-        let landscape = DeviceClassResolver.resolve(width: deviceClass.screenHeight, height: deviceClass.screenWidth)
-        #expect(landscape.deviceClass == deviceClass)
-        #expect(landscape.isExact)
-    }
-
-    @Test("A size the export does not list gets the nearest class, and says so")
-    func nearest() {
-        let result = DeviceClassResolver.resolve(width: 401, height: 870)
-        #expect(result.deviceClass == .iphone402x874)
-        #expect(!result.isExact)
-    }
-
-    @Test("Wider than high is landscape")
-    func orientation() {
-        #expect(DeviceClassResolver.orientation(width: 874, height: 402) == .landscape)
-        #expect(DeviceClassResolver.orientation(width: 402, height: 874) == .portrait)
-    }
-}
+// Which class and orientation a screen gets is the core's (DeviceClass.match, Orientation(screenWidth:...)),
+// tested on Linux in Tests/SpeakboardCoreTests/Layout/DeviceClassMatchingTests.swift. These tests check the view
+// passes the screen in and shows what the core returns.
 
 @Suite("KeyboardKit: the placeholder view")
 @MainActor
@@ -48,6 +26,27 @@ struct PlaceholderKeyboardViewTests {
         #expect(view.lines.first == "Speakboard · placeholder keyboard")
         #expect(view.lines.contains { $0.contains("iphone-402x874 portrait") })
         #expect(!view.lines.contains { $0.hasPrefix("Full Access") })
+    }
+
+    @Test("A screen the export does not list gets the core's nearest class, and says so")
+    func nearest() {
+        let view = PlaceholderKeyboardView(frame: .zero)
+        let height = view.update(screenWidth: 401, screenHeight: 870)
+        #expect(view.layout?.deviceClass == .iphone402x874)
+        #expect(view.lines.contains { $0.contains("(nearest to 401x870)") })
+        #expect(
+            height == KeyboardLayout(locale: .english, deviceClass: .iphone402x874, orientation: .portrait)?.size.height
+        )
+    }
+
+    @Test("A landscape screen gets the landscape layout")
+    func landscape() throws {
+        let view = PlaceholderKeyboardView(frame: .zero)
+        let height = view.update(screenWidth: 874, screenHeight: 402)
+        let layout = try #require(
+            KeyboardLayout(locale: .english, deviceClass: .iphone402x874, orientation: .landscape))
+        #expect(view.layout?.orientation == .landscape)
+        #expect(height == layout.size.height)
     }
 
     @Test("It shows whether the keyboard has Full Access, when told")
