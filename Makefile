@@ -121,11 +121,9 @@ guard-extension: $(DOCKER_READY)
 # types no number used as a metric and makes no colour from literals, as the
 # compiler parses it (so it needs the frontend, like guard-imports). See the
 # guard's header for its allowances and what it cannot see. The self-test runs
-# first. KEY-62: until the placeholder view is replaced, only the self-test runs
-# here; turning the check on for the real folders is this one line, with
-# `&& scripts/literal-guard.sh` in place of the `&& echo ...`.
+# first.
 guard-literals: $(DOCKER_READY)
-	@$(RUN) bash -c '$(FRONTEND) scripts/literal-guard-selftest.sh && echo "literal guard: NOT RUN on Apple/Keyboard and Apple/KeyboardKit yet: only its self-test runs until KEY-62 replaces the placeholder view"'
+	@$(RUN) bash -c '$(FRONTEND) scripts/literal-guard-selftest.sh && scripts/literal-guard.sh'
 
 # metrics-check: the pinned token export matches DesignTokens/tokens.pin, and the
 # committed generated files (the metrics tables and the drawing tokens) are

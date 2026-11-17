@@ -2,15 +2,22 @@
 # Shows our keyboard in an iOS simulator with no one at the screen, and takes
 # screenshots of it (KEY-8). Used by .github/workflows/macos.yml and by hand.
 #
-#   scripts/sim-keyboard.sh <Speakboard.app> <device type name> <runtime id> <out dir>
+#   scripts/sim-keyboard.sh <Speakboard.app> <device type name> <runtime id> <out dir> [<derived data>]
 #   e.g. scripts/sim-keyboard.sh .build/xcode/Build/Products/Debug-iphonesimulator/Speakboard.app \
-#          "iPhone 18 Pro" com.apple.CoreSimulator.SimRuntime.iOS-27-2 .build/screenshots
+#          "iPhone 18 Pro" com.apple.CoreSimulator.SimRuntime.iOS-27-2 .build/screenshots .build/xcode
 #
 # It makes a fresh simulator, deletes it at the end, and writes into <out dir>:
-#   harness.png   the keyboard's view hosted in the app (-SpeakboardHarness)
-#   keyboard.png  the keyboard extension itself, enabled with Full Access, in
-#                 the app's text field
-#   keyboard.log  the extension's own log line: its height and Full Access
+#   harness.png        the keyboard's view hosted in the app (-SpeakboardHarness)
+#   keyboard.png       the keyboard extension itself, enabled with Full Access,
+#                      in the app's text field, in light appearance
+#   keyboard-dark.png  the same in dark appearance
+#   keyboard.log       the extension's own log line: its height, key count and
+#                      Full Access
+# With <derived data> (where Speakboard.xcodeproj was built), it then runs the
+# UI tests (scheme SpeakboardUITests, KEY-62) on this simulator, once in light
+# and once in dark appearance: they type through the extension and read the
+# field back. Each run's log, result bundle and exported screenshots go to
+# ui-<appearance>.log, ui-<appearance>.xcresult and ui-<appearance>/.
 #
 # How the keyboard is enabled, found by enabling it in Settings by hand on
 # iOS 27.2 and reading what changed:
@@ -27,14 +34,15 @@
 # fullAccess=false) rather than passing on a screenshot of the wrong keyboard.
 set -euo pipefail
 
-if [ "$#" -ne 4 ]; then
-    echo "usage: $0 <Speakboard.app> <device type name> <runtime id> <out dir>" >&2
+if [ "$#" -ne 4 ] && [ "$#" -ne 5 ]; then
+    echo "usage: $0 <Speakboard.app> <device type name> <runtime id> <out dir> [<derived data>]" >&2
     exit 2
 fi
 app=$1
 device_type=$2
 runtime=$3
 out=$4
+derived=${5:-}
 
 app_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
 appex="$app/PlugIns/SpeakboardKeyboard.appex"
@@ -112,11 +120,16 @@ if ! wait_for_process "Devices/$udid/.*SpeakboardKeyboard\.appex" 30; then
 fi
 sleep 4
 xcrun simctl io "$udid" screenshot "$out/keyboard.png" > /dev/null 2>&1
+xcrun simctl ui "$udid" appearance dark
+sleep 3
+xcrun simctl io "$udid" screenshot "$out/keyboard-dark.png" > /dev/null 2>&1
+xcrun simctl ui "$udid" appearance light
+sleep 2
 
 # 5. Check what the extension itself reported.
 xcrun simctl spawn "$udid" log show --style compact --start "$start" \
     --predicate "subsystem == \"$ext_id\"" > "$out/keyboard.log" 2>&1 || true
-line=$(grep -o 'speakboard-shell .*' "$out/keyboard.log" | tail -1 || true)
+line=$(grep -o 'speakboard-keyboard .*' "$out/keyboard.log" | tail -1 || true)
 if [ -z "$line" ]; then
     echo "sim-keyboard: FAIL: no log line from the keyboard extension (see $out/keyboard.log)" >&2
     exit 1
@@ -129,4 +142,31 @@ case "$line" in
         exit 1
         ;;
 esac
-echo "sim-keyboard: OK ($out/harness.png, $out/keyboard.png)"
+case "$line" in
+    *keys=0*)
+        echo "sim-keyboard: FAIL: the extension drew no keys" >&2
+        exit 1
+        ;;
+esac
+echo "sim-keyboard: OK ($out/harness.png, $out/keyboard.png, $out/keyboard-dark.png)"
+
+# 6. The typing proof through the extension (KEY-62), on this simulator.
+if [ -n "$derived" ]; then
+    xcrun simctl terminate "$udid" "$app_id" > /dev/null 2>&1 || true
+    for appearance in light dark; do
+        xcrun simctl ui "$udid" appearance "$appearance"
+        echo "sim-keyboard: UI tests in $appearance appearance"
+        status=0
+        TEST_RUNNER_SPEAKBOARD_APPEARANCE="$appearance" xcodebuild -project Speakboard.xcodeproj \
+            -scheme SpeakboardUITests -destination "id=$udid" -derivedDataPath "$derived" \
+            -resultBundlePath "$out/ui-$appearance.xcresult" test > "$out/ui-$appearance.log" 2>&1 || status=$?
+        grep -E 'speakboard-ui:|error:|Test Case .*(passed|failed)|TEST (SUCCEEDED|FAILED)' "$out/ui-$appearance.log" || true
+        xcrun xcresulttool export attachments --path "$out/ui-$appearance.xcresult" \
+            --output-path "$out/ui-$appearance" > /dev/null 2>&1 || echo "sim-keyboard: could not export the screenshots"
+        if [ "$status" -ne 0 ]; then
+            echo "sim-keyboard: FAIL: the UI tests failed in $appearance appearance (see $out/ui-$appearance.log)" >&2
+            exit 1
+        fi
+    done
+    echo "sim-keyboard: OK: the UI tests typed through the extension in light and dark appearance"
+fi

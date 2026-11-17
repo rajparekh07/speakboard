@@ -17,7 +17,7 @@ make check
 3. **Core dependency guard.** It first runs its own self-test, then checks that the `SpeakboardCore` target in `Package.swift` is a regular target, declares no dependencies and sets no `path`, `sources`, plugins or build settings of any kind (`swiftSettings`, `cSettings`, `cxxSettings`, `linkerSettings`: so no unsafe flags, defines or language mode), that the package sets no `swiftLanguageModes` and its tools version is 6.x (below 6.0 the core would build as Swift 5, and a later major version may default to a later mode than the imports guard reads), and that the `SpeakboardCore` product holds only that target. Those are ways to compile code into the core, or ship code beside it, from outside the folder the core guard reads, or to build the core in a language mode other than the Swift 6 the imports guard reads it in. It does not close every way: it reads only those keys of the package, the target and the product. It reads the package as SwiftPM sees it (`swift package dump-package`), inside Docker.
 4. **Core imports guard.** It first runs its own self-test. Then it fails if any Swift file under `Sources/SpeakboardCore` contains conditional compilation (`#if`, `#elseif`, `#else`, `#endif`), naming the file and line. The compiler reports imports only in code it compiles, and which branches it compiles depends on the platform, the target and the build's defines (`swift build` adds `DEBUG` and `SWIFT_PACKAGE`), so the core has no branches at all. This step reads the text, so an `#if` in a comment or a string fails too, on purpose. Apple-only code goes under `Apple/`. Then it asks the compiler which modules each file imports (`swift-frontend -emit-imported-modules`, inside Docker) and fails, naming the file and the module, if any is not `Foundation`. Reading the compiler's answer rather than the text means every spelling of an import counts, and with no conditional compilation the compiler sees every import. It reads every file as Swift 6, which step 3 makes the only mode the core builds in. It fails closed: a failing `find`, a missing frontend, a non-zero exit (a syntax error, or a toolchain that drops the flag) or no output file fails it.
 5. **Keyboard extension guard.** It first runs its own self-test. Then, for `Apple/Keyboard` and `Apple/KeyboardKit` (the code linked into the extension), it fails on any file that is not a Swift file (an `Info.plist` aside), on conditional compilation (for the core's reason: the compiler reports imports only in branches it compiles), and on any import of a module outside an allowlist: Foundation, UIKit, QuartzCore, OSLog, SpeakboardCore and KeyboardKit, each justified in `scripts/extension-guard.sh`. It reads the imports with the compiler (`swift-frontend -emit-imported-modules`, inside Docker), so every spelling counts. As a second net, not a proof, it fails on networking names in the text (`URLSession` and its relatives, Network and CFNetwork types, Foundation streams, `contentsOf:`, BSD socket calls). On macOS CI (rung 2) the guard also checks that `project.yml` builds the extension and KeyboardKit exactly as the extension guard expects (their whole target entries: sources, dependencies, settings, and no other key, such as a build tool plugin or a script phase), with only known project-wide settings, the core from this repo, no multi-platform target, and no `preGenCommand`, `postGenCommand` or scheme pre- or post-actions, and that the built extension's binaries load no SwiftUI and no networking framework (`otool -L`). What none of this sees: networking through APIs the allowlist already lets in. `URLSession` reached without a new import, `Data(contentsOf:)` with a URL, `Stream` and BSD sockets live in Foundation and libSystem, so they add no import and no linked library; only the text net might catch them. The manifesto's full privacy gate is its own ticket, KEY-11 ("Privacy gate: no networking code in the keyboard extension").
-6. **Literal guard.** It runs its own self-test. The guard fails on a number typed into the keyboard's view code (`Apple/Keyboard` and `Apple/KeyboardKit`, every Swift file there, whatever its name) and on a colour made from literals, naming the file and line: every dimension and colour comes from the generated tokens (`KeyStyle`, `Palette`, `Typography`, `Metrics`). It asks the compiler rather than reading the text: the rules are judged on `swift-frontend -dump-parse` (inside Docker; it needs no UIKit), so comments never count and a number written inside a string's text is not a number, and the type-checked dump is used only to find each finding's line. A colour made from literals is any literal in the arguments of a `UIColor`, `CGColor` (or other colour type) initialiser or a Core Graphics colour function, a named colour (`UIColor.white`, `.clear`), `#colorLiteral`, or a hex colour string. It allows three literals outside colours, and no other: `0` (or `0.0`), `1` as the whole right-hand side of `+=` or `-=`, and `2` after `/`. It fails closed: a missing frontend, a file it cannot parse or a dump it does not know fails it. What it cannot see (constants from other modules, a typealias of a colour type, and the rest) is listed in `scripts/literal-guard.sh`. Until KEY-62's keyboard view replaces the placeholder (today `PlaceholderKeyboardView.swift` and `KeyboardViewController.swift` have literals), `make check` runs only the self-test and says the real folders are not checked; turning the check on is one line in the `Makefile` (`guard-literals`).
+6. **Literal guard.** It runs its own self-test. The guard fails on a number typed into the keyboard's view code (`Apple/Keyboard` and `Apple/KeyboardKit`, every Swift file there, whatever its name) and on a colour made from literals, naming the file and line: every dimension and colour comes from the generated tokens (`KeyStyle`, `Palette`, `Typography`, `Metrics`). It asks the compiler rather than reading the text: the rules are judged on `swift-frontend -dump-parse` (inside Docker; it needs no UIKit), so comments never count and a number written inside a string's text is not a number, and the type-checked dump is used only to find each finding's line. A colour made from literals is any literal in the arguments of a `UIColor`, `CGColor` (or other colour type) initialiser or a Core Graphics colour function, a named colour (`UIColor.white`, `.clear`), `#colorLiteral`, or a hex colour string. It allows three literals outside colours, and no other: `0` (or `0.0`), `1` as the whole right-hand side of `+=` or `-=`, and `2` after `/`. It fails closed: a missing frontend, a file it cannot parse or a dump it does not know fails it. What it cannot see (constants from other modules, a typealias of a colour type, and the rest) is listed in `scripts/literal-guard.sh`. Then it checks the real folders.
 7. **Design tokens.** It checks that the pinned token export in `DesignTokens/` has the SHA-256 that `DesignTokens/tokens.pin` records, then runs the generator and fails if `Sources/SpeakboardCore/Layout/GeneratedMetrics.swift` or `Sources/SpeakboardCore/Layout/GeneratedDrawingTokens.swift` differs from what it makes. See "Design tokens" below.
 8. **Build.** `swift build`
 9. **Tests.** `swift test`
@@ -62,7 +62,7 @@ The step targets take `NATIVE=1` to run one step on the host too: `guard-deps`, 
 | `make guard-deps` | The core dependency guard and its self-test only |
 | `make guard-imports` | The core imports guard and its self-test only |
 | `make guard-extension` | The keyboard extension guard (sources) and its self-test only |
-| `make guard-literals` | The literal guard's self-test only, until KEY-62 turns the guard on for the real folders |
+| `make guard-literals` | The literal guard and its self-test only |
 | `make metrics-check` | The design token step only |
 | `make metrics` | Regenerates the metrics tables and the drawing tokens from the pinned token export |
 | `make build` | `swift build` in Docker |
@@ -128,7 +128,7 @@ Every push to the working branch or to `main` also runs `.github/workflows/macos
 3. Builds the app and the keyboard extension for the iPhone 18 Pro simulator, iOS 27.2.
 4. The extension guard's macOS-only checks: its `project` self-test, `scripts/extension-guard.sh project project.yml` (the project builds the extension and KeyboardKit exactly as the extension guard expects (their whole target entries: sources, dependencies, settings, and no other key, such as a build tool plugin or a script phase), with only known project-wide settings, the core from this repo, no multi-platform target, and no `preGenCommand`, `postGenCommand` or scheme pre- or post-actions) and `scripts/extension-guard.sh binary` on the built extension (no SwiftUI and no networking framework loaded).
 5. The unit tests (`KeyboardKitTests`).
-6. `scripts/sim-keyboard.sh`: a fresh simulator, a screenshot of the keyboard's view in the app's harness, then the keyboard extension enabled with Full Access and shown in the app's text field, with a second screenshot. It fails unless the extension itself logs that it ran with Full Access. How it enables the keyboard is in the script.
+6. `scripts/sim-keyboard.sh`: a fresh simulator, a screenshot of the keyboard's view in the app's harness, then the keyboard extension enabled with Full Access and shown in the app's text field, with screenshots in light and dark appearance. It fails unless the extension itself logs that it ran with Full Access and drew its keys. How it enables the keyboard is in the script. Then, on the same simulator, the UI tests (`Apple/SpeakboardUITests`, scheme `SpeakboardUITests`) type through the keyboard extension, in light and in dark appearance: they tap key centres computed from the core's layout and read the app's field back, with screenshots of Shift off, on and in caps lock in the result bundles.
 
 It uploads the screenshots and logs as the artifact `macos-screenshots-and-logs`. To run the same on a Mac:
 
@@ -137,7 +137,7 @@ xcodegen generate
 xcodebuild -project Speakboard.xcodeproj -scheme Speakboard \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro,OS=27.2' -derivedDataPath .build/xcode test
 scripts/sim-keyboard.sh .build/xcode/Build/Products/Debug-iphonesimulator/Speakboard.app \
-  "iPhone 18 Pro" com.apple.CoreSimulator.SimRuntime.iOS-27-2 .build/screenshots
+  "iPhone 18 Pro" com.apple.CoreSimulator.SimRuntime.iOS-27-2 .build/screenshots .build/xcode
 ```
 
 The bundle identifiers in `project.yml` are placeholders until the owner has an Apple Developer account. Simulator builds need no signing, and no team is set.
@@ -162,13 +162,15 @@ Tests/AllocationCounter/   test support: counts heap allocations (C, Linux), for
 DesignTokens/              the pinned design token export the metrics tables come from
 scripts/                   the scripts behind make check, and the metrics generator
 Makefile                   make check
-.github/workflows/         CI: linux.yml runs make check, macos.yml the Xcode build, tests and
-                           screenshots, on every push
+.github/workflows/         CI: linux.yml runs make check, macos.yml the Xcode build, tests,
+                           screenshots and the typing proof, on every push
 Apple/Keyboard/            the keyboard extension: UIKit and Core Animation only, no SwiftUI
-Apple/KeyboardKit/         linked into the extension (and the app's harness): its views, and
-                           the only app or extension code that imports the core
-                           (KeyboardKitTests imports it too)
+Apple/KeyboardKit/         linked into the extension (and the app's harness): the keyboard
+                           view and its typing adapter, and the only app or extension code
+                           that imports the core (the test targets import it too)
 Apple/KeyboardKitTests/    unit tests for KeyboardKit, run in the simulator
+Apple/SpeakboardUITests/   UI tests that type through the keyboard extension, run by
+                           scripts/sim-keyboard.sh
 Apple/App/                 the containing app: SwiftUI
 project.yml                XcodeGen definition of the targets; the .xcodeproj is never committed
 ```
@@ -176,7 +178,7 @@ project.yml                XcodeGen definition of the targets; the .xcodeproj is
 These come later, with their own tickets:
 
 ```
-Apple/KeyboardKit/         also: key rendering, haptics, IPC client
+Apple/KeyboardKit/         also: key popups, haptics, IPC client
 Apple/AppServices/         linked into the app only: audio, speech engines, storage,
                            anything that may touch the network
 Evals/                     typing and dictation evaluation sets

@@ -9,7 +9,8 @@
 # no multi-platform target, and no generation command or scheme action) and
 # that the built extension loads no SwiftUI and no networking
 # framework (what these checks cannot see is in scripts/extension-guard.sh),
-# runs the unit tests, and takes screenshots of our keyboard in the simulator.
+# runs the unit tests, takes screenshots of our keyboard in the simulator, and
+# types through the keyboard extension there with UI tests (KEY-62).
 name: macos
 
 on:
@@ -112,10 +113,10 @@ jobs:
             | grep -E '(error|warning):|Test run with|✘|TEST (SUCCEEDED|FAILED)' || true
           grep -q '\*\* TEST SUCCEEDED \*\*' "$OUT/xcodebuild-test.log"
 
-      - name: Screenshots of the keyboard in the simulator
+      - name: The keyboard in the simulator, screenshots and the typing proof
         run: |
           scripts/sim-keyboard.sh "$DERIVED_DATA/Build/Products/Debug-iphonesimulator/Speakboard.app" \
-            "$SIM_DEVICE" "$SIM_RUNTIME" "$OUT/screenshots"
+            "$SIM_DEVICE" "$SIM_RUNTIME" "$OUT/screenshots" "$DERIVED_DATA"
 
       - name: Upload the screenshots and logs
         if: always()

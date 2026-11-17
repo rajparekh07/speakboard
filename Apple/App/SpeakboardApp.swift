@@ -35,8 +35,10 @@ struct SetupView: View {
                         .accessibilityIdentifier("TryField")
                 }
                 Section {
-                    Text("This is a placeholder build: the keyboard shows the core's layout size and no keys yet.")
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Speakboard types English letters, space, delete and return. Numbers, emoji and dictation come later."
+                    )
+                    .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Speakboard")
@@ -50,7 +52,8 @@ struct SetupView: View {
 }
 
 /// The harness: the keyboard's view, embedded in the app at the bottom of the screen at the height the core gives
-/// it, for screenshots and tests without enabling the extension. Launch the app with `-SpeakboardHarness`.
+/// it, for screenshots without enabling the extension. It draws the keys and types nothing. Launch the app with
+/// `-SpeakboardHarness`.
 struct HarnessView: View {
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains("-SpeakboardHarness")
@@ -78,11 +81,11 @@ struct HarnessView: View {
 struct KeyboardViewRepresentable: UIViewRepresentable {
     @Binding var height: CGFloat
 
-    func makeUIView(context: Context) -> PlaceholderKeyboardView {
-        PlaceholderKeyboardView(frame: .zero)
+    func makeUIView(context: Context) -> KeyboardView {
+        KeyboardView(typing: nil)
     }
 
-    func updateUIView(_ view: PlaceholderKeyboardView, context: Context) {
+    func updateUIView(_ view: KeyboardView, context: Context) {
         guard let screen = view.window?.windowScene?.screen else {
             DispatchQueue.main.async { updateHeight(view) }
             return
@@ -90,12 +93,12 @@ struct KeyboardViewRepresentable: UIViewRepresentable {
         apply(view, screen: screen)
     }
 
-    private func updateHeight(_ view: PlaceholderKeyboardView) {
+    private func updateHeight(_ view: KeyboardView) {
         guard let screen = view.window?.windowScene?.screen else { return }
         apply(view, screen: screen)
     }
 
-    private func apply(_ view: PlaceholderKeyboardView, screen: UIScreen) {
+    private func apply(_ view: KeyboardView, screen: UIScreen) {
         if let coreHeight = view.update(screenWidth: screen.bounds.width, screenHeight: screen.bounds.height),
             CGFloat(coreHeight) != height
         {

@@ -36,6 +36,11 @@ public struct RGBAColor: Equatable, Sendable {
 
     /// Alpha, from 0 to 1, straight: the colour components are not multiplied by it.
     public var alpha: Double { Double(rgba & 0xFF) / 255 }
+
+    /// The same red, green and blue, fully opaque. For a drawing API that takes the opacity apart from the colour
+    /// (a Core Animation shadow's `shadowOpacity`), pass this colour and `alpha` as the opacity, so the alpha is not
+    /// applied twice.
+    public var opaque: RGBAColor { RGBAColor(rgba | 0xFF) }
 }
 
 /// One colour token's value for one appearance, with where it comes from.

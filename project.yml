@@ -9,6 +9,10 @@
 #                      harness): the only target in the app or the extension
 #                      that imports the core (KeyboardKitTests imports it too)
 #   KeyboardKitTests  unit tests for KeyboardKit, run in the simulator
+#   SpeakboardUITests UI tests of the keyboard extension itself, typing into the
+#                     app's field; run by scripts/sim-keyboard.sh on a simulator
+#                     where the keyboard is enabled (its own scheme, so the unit
+#                     test step does not run it)
 #
 # The core (Sources/SpeakboardCore) comes in as the local Swift package at the
 # repo root, so Xcode builds the same sources `make check` does (ADR-0005).
@@ -108,7 +112,31 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(SPEAKBOARD_BUNDLE_ID).KeyboardKitTests
         GENERATE_INFOPLIST_FILE: YES
 
+  SpeakboardUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Apple/SpeakboardUITests
+    dependencies:
+      - target: Speakboard
+      - package: Speakboard
+        product: SpeakboardCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SPEAKBOARD_BUNDLE_ID).UITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Speakboard
+
 schemes:
+  SpeakboardUITests:
+    build:
+      targets:
+        Speakboard: all
+        SpeakboardKeyboard: all
+        SpeakboardUITests: [test]
+    test:
+      targets:
+        - SpeakboardUITests
   Speakboard:
     build:
       targets:
