@@ -6,6 +6,8 @@ import XCTest
 // it. It launches the app with its field focused, brings Speakboard up, finds it by its view's accessibility
 // identifier, taps key centres computed from the core's layout, and reads the field back: "hi", a double space (a
 // double tap on the space bar), "ok" and a delete give "Hi. O", and after a double tap on Shift, "ab" types "AB".
+// Then, with Shift off, a tap in the gap between two rows and one in the margin beside the "a" row each type their
+// nearest letter (KEY-24).
 // SPEAKBOARD_APPEARANCE (set by the script through TEST_RUNNER_) names the screenshots.
 
 /// The view's accessibility identifier: KeyboardView.accessibilityID (KeyboardKit is not linked into this target).
@@ -40,10 +42,26 @@ struct KeyboardOnScreen {
     }
 
     func coordinate(_ kind: KeyKind) throws -> XCUICoordinate {
-        let key = try XCTUnwrap(layout.keys.first { $0.kind == kind }, "no \(kind) key")
-        let center = key.frame.center
-        return app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-            .withOffset(CGVector(dx: Double(origin.x) + center.x, dy: Double(origin.y) + center.y))
+        coordinate(try frame(kind).center)
+    }
+
+    /// The screen coordinate of `point`, in the keyboard view's coordinates.
+    func coordinate(_ point: LayoutPoint) -> XCUICoordinate {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+            .withOffset(CGVector(dx: Double(origin.x) + point.x, dy: Double(origin.y) + point.y))
+    }
+
+    func frame(_ kind: KeyKind) throws -> LayoutRect {
+        try XCTUnwrap(layout.keys.first { $0.kind == kind }, "no \(kind) key").frame
+    }
+
+    /// Taps `point`, which must be in a gap or margin, where the exact hit-test finds no key and the nearest-key
+    /// hit-test finds `expected` (KEY-24).
+    func tap(gap point: LayoutPoint, expecting expected: KeyKind, _ what: String) throws {
+        XCTAssertNil(layout.key(at: point), "\(what): the point \(point) is on a key, not in a gap")
+        XCTAssertEqual(layout.key(nearest: point)?.kind, expected, "\(what): the nearest key")
+        say("tap \(what) at \(point), nearest key \(expected)")
+        coordinate(point).tap()
     }
 
     func tap(_ kind: KeyKind) throws {
@@ -125,7 +143,8 @@ final class KeyboardExtensionUITests: XCTestCase {
     /// Through the extension: "hi" with Shift on for the first letter (sentence capitalisation), a double space as a
     /// double tap on the space bar (a full stop, which reads the proxy's context right after the keyboard's own
     /// insert), "ok" (Shift on again after the full stop), a delete; then Shift on, and caps lock as a double tap on
-    /// Shift, checked by typing "ab" as "AB" and deleting it.
+    /// Shift, checked by typing "ab" as "AB" and deleting it; then Shift off, and "g" and "a" typed by taps in a gap
+    /// and a margin (KEY-24).
     @MainActor
     func testTypesThroughTheExtension() throws {
         testStart = Date()
@@ -166,5 +185,18 @@ final class KeyboardExtensionUITests: XCTestCase {
         try keyboard.tap(.delete)
         try keyboard.tap(.delete)
         expectValue(field, "Hi. O", "after two deletes")
+
+        // Hit targets (KEY-24): Shift off, then a tap in the gap between the "g" row and the row below it, a quarter
+        // of the way down, and one in the margin left of "a". Each types its nearest letter.
+        try keyboard.tap(.shift)
+        let g = try keyboard.frame(.letter("g"))
+        let b = try keyboard.frame(.letter("b"))
+        try keyboard.tap(
+            gap: LayoutPoint(x: g.center.x, y: g.maxY + (b.minY - g.maxY) / 4), expecting: .letter("g"),
+            "the gap below g")
+        let a = try keyboard.frame(.letter("a"))
+        try keyboard.tap(
+            gap: LayoutPoint(x: a.minX / 2, y: a.center.y), expecting: .letter("a"), "the margin left of a")
+        expectValue(field, "Hi. Oga", "after Shift off and the taps in a gap and beside a")
     }
 }

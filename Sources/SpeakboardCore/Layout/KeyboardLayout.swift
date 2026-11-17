@@ -4,8 +4,19 @@
 // keyboard extension cannot drift from the design tokens.
 //
 // Hit-testing allocates nothing: the frames are computed once, when the layout
-// is built, and `key(at:)` only reads them. Key and KeyKind are plain values
-// with no references in them.
+// is built, and `key(at:)` and `keyIndex(nearest:)` only read them. Key and
+// KeyKind are plain values with no references in them.
+//
+// Two hit-tests (KEY-24). `key(at:)` is exact: the key whose face contains the
+// point, so a point in a gap between keys hits nothing. `keyIndex(nearest:)` is
+// what touch handling uses: every point of the keyboard below the suggestion
+// strip belongs to a key, so a finger that lands or lifts in a gap, or in the
+// margin beside the row that starts with "a", still types. Its rule is ours,
+// plain arithmetic on the frames, not measured from Apple's keyboard: Apple's
+// keyboard also moves its hit targets with what is likely to be typed next,
+// and nothing here does that or claims to match Apple's targets. Assumption,
+// for a device test (rung 4): that the nearest key by this rule is what a
+// finger in a gap means.
 //
 // The bottom row is Apple's default row, as the token export assumes it when it
 // derives key.space.width: 123, emoji, space, return on iPhones with a home
@@ -37,6 +48,16 @@ public enum KeyKind: Equatable, Sendable {
     case space
     /// Return, at the right of the bottom row.
     case returnKey
+}
+
+/// Which key a touch belongs to: `KeyboardLayout.keyIndex(at:by:)`.
+public enum HitTesting: Equatable, Sendable {
+    /// Only the key whose frame contains the point (`keyIndex(at:)`): a touch in a gap belongs to no key. Touch
+    /// handling used this before KEY-24; tests use it to show what the nearest-key rule changes.
+    case exact
+    /// The nearest key (`keyIndex(nearest:)`): a touch anywhere below the suggestion strip belongs to a key. What
+    /// touch handling uses.
+    case nearest
 }
 
 /// A key and its frame in the keyboard view.
@@ -100,15 +121,97 @@ public struct KeyboardLayout: Sendable {
     /// over an array calls the generic `IndexingIterator.next()`, which allocates once per element when the code
     /// is not optimised.
     public func key(at point: LayoutPoint) -> Key? {
+        guard let index = keyIndex(at: point) else { return nil }
+        return keys[index]
+    }
+
+    /// The index in `keys` of the key whose frame contains `point`, or nil: `key(at:)`, as an index. Allocates
+    /// nothing.
+    public func keyIndex(at point: LayoutPoint) -> Int? {
         var index = 0
         while index < keys.count {
-            let key = keys[index]
-            if key.frame.contains(point) {
-                return key
+            if keys[index].frame.contains(point) {
+                return index
             }
             index += 1
         }
         return nil
+    }
+
+    /// The key nearest `point`: `keyIndex(nearest:)`, as a key.
+    public func key(nearest point: LayoutPoint) -> Key? {
+        guard let index = keyIndex(nearest: point) else { return nil }
+        return keys[index]
+    }
+
+    /// The index in `keys` of the key a touch at `point` belongs to, for touch handling (KEY-24). Every point of
+    /// the keyboard below the suggestion strip belongs to a key, so a touch in a gap between keys or rows, in the
+    /// margin beside a row that does not reach the edge (the row that starts with "a"), or in an inset, still finds
+    /// one. The rule, which is ours and not measured (see the note at the top of this file):
+    ///
+    /// 1. Nil for a point outside the view below the strip: in the suggestion strip (`y` below `suggestionStrip.maxY`),
+    ///    left of 0, at or past `size.width` or `size.height`, or not a number.
+    /// 2. The key whose frame contains the point, if one does (`keyIndex(at:)`), so a touch on a key is that key.
+    /// 3. Otherwise the nearest row: the row whose keys' top-to-bottom span is the least vertical distance from the
+    ///    point. Then the nearest key in that row: the one whose left-to-right span is the least horizontal distance
+    ///    from it. A gap between two rows is split at its middle, as is a gap between two keys in a row, and a margin
+    ///    or inset beside a row's end goes to the key at that end.
+    /// 4. Ties go to the key that comes first in `keys`: a point exactly in the middle of the gap between two rows
+    ///    goes to the upper row, and one exactly in the middle of the gap between two keys to the left key.
+    ///
+    /// Allocates nothing: two `while` loops over the frames.
+    public func keyIndex(nearest point: LayoutPoint) -> Int? {
+        // Comparisons with NaN are false, so a point that is not a number fails here.
+        guard point.x >= 0, point.x < size.width, point.y >= suggestionStrip.maxY, point.y < size.height else {
+            return nil
+        }
+        if let exact = keyIndex(at: point) { return exact }
+
+        // The nearest row, named by its keys' top edge: every key in a row has the same top and height.
+        var rowTop = 0.0
+        var rowDistance = Double.infinity
+        var index = 0
+        while index < keys.count {
+            let frame = keys[index].frame
+            let distance = Self.distance(point.y, from: frame.minY, to: frame.maxY)
+            if distance < rowDistance {
+                rowDistance = distance
+                rowTop = frame.minY
+            }
+            index += 1
+        }
+
+        // The nearest key in that row.
+        var nearest: Int?
+        var keyDistance = Double.infinity
+        index = 0
+        while index < keys.count {
+            let frame = keys[index].frame
+            if frame.minY == rowTop {
+                let distance = Self.distance(point.x, from: frame.minX, to: frame.maxX)
+                if distance < keyDistance {
+                    keyDistance = distance
+                    nearest = index
+                }
+            }
+            index += 1
+        }
+        return nearest
+    }
+
+    /// The index of the key under a touch at `point`, by `hitTesting`.
+    public func keyIndex(at point: LayoutPoint, by hitTesting: HitTesting) -> Int? {
+        switch hitTesting {
+        case .exact: return keyIndex(at: point)
+        case .nearest: return keyIndex(nearest: point)
+        }
+    }
+
+    /// The distance from `value` to the span from `low` to `high`, both included: 0 inside it.
+    private static func distance(_ value: Double, from low: Double, to high: Double) -> Double {
+        if value < low { return low - value }
+        if value > high { return value - high }
+        return 0
     }
 
     private static func keys(

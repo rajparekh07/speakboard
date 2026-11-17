@@ -96,6 +96,40 @@ final class Rig {
             try tap(character == " " ? .space : letter(character))
         }
     }
+
+    /// A tap at `point`: down, 50 ms, up, 100 ms.
+    func tap(at point: CGPoint) {
+        let touch = newTouch()
+        view.touchDown(touch, at: point, time: clock)
+        clock += 0.05
+        view.touchUp(touch, at: point, time: clock)
+        clock += 0.1
+    }
+
+    func frame(_ kind: KeyKind) throws -> LayoutRect {
+        layout.keys[try index(of: kind)].frame
+    }
+
+    static func cgPoint(_ point: LayoutPoint) -> CGPoint {
+        CGPoint(x: point.x, y: point.y)
+    }
+
+    static func layoutPoint(_ point: CGPoint) -> LayoutPoint {
+        LayoutPoint(x: Double(point.x), y: Double(point.y))
+    }
+
+    /// A point in the gap below "g", a quarter of the way down to the row below: the nearest key is "g".
+    func gapBelowG() throws -> CGPoint {
+        let g = try frame(letter("g"))
+        let below = try frame(letter("b"))
+        return Self.cgPoint(LayoutPoint(x: g.center.x, y: g.maxY + (below.minY - g.maxY) / 4))
+    }
+
+    /// A point in the margin left of "a", at its middle height: the nearest key is "a".
+    func besideA() throws -> CGPoint {
+        let a = try frame(letter("a"))
+        return Self.cgPoint(LayoutPoint(x: a.minX / 2, y: a.center.y))
+    }
 }
 
 /// Types "hi", two spaces, "x" and a delete, and returns the field's text.
@@ -253,6 +287,144 @@ struct KeyboardTypingTests {
         rig.view.touchMove(1, to: try rig.point(rig.letter("w")), time: rig.clock + 0.05)
         rig.view.touchUp(1, at: try rig.point(rig.letter("w")), time: rig.clock + 0.1)
         #expect(rig.field.text == "w")
+    }
+}
+
+@Suite("KeyboardKit: hit targets and several fingers through the keyboard view (KEY-24)")
+@MainActor
+struct KeyboardTouchTests {
+    @Test(
+        "A tap in a gap between rows, and one beside the a row, type the nearest letter; the exact hit-test types none",
+        arguments: [HitTesting.nearest, .exact])
+    func gapTaps(hitTesting: HitTesting) throws {
+        let rig = try Rig(autocapitalization: .none)
+        rig.typing.hitTesting = hitTesting
+        let gap = try rig.gapBelowG()
+        let margin = try rig.besideA()
+        #expect(rig.layout.key(at: Rig.layoutPoint(gap)) == nil, "the point is in a gap")
+        #expect(rig.layout.key(at: Rig.layoutPoint(margin)) == nil, "the point is in the margin")
+        rig.tap(at: gap)
+        rig.tap(at: margin)
+        #expect(rig.field.text == (hitTesting == .nearest ? "ga" : ""), "\(hitTesting)")
+    }
+
+    @Test(
+        "A finger that lands on a key and lifts in a gap types the key; the exact hit-test types none",
+        arguments: [HitTesting.nearest, .exact])
+    func liftInAGap(hitTesting: HitTesting) throws {
+        let rig = try Rig(autocapitalization: .none)
+        rig.typing.hitTesting = hitTesting
+        let g = try rig.frame(rig.letter("g"))
+        let lift = Rig.cgPoint(LayoutPoint(x: g.center.x, y: g.maxY + 1))
+        #expect(rig.layout.key(at: Rig.layoutPoint(lift)) == nil)
+        rig.view.touchDown(1, at: try rig.point(rig.letter("g")), time: rig.clock)
+        rig.view.touchMove(1, to: lift, time: rig.clock + 0.03)
+        rig.view.touchUp(1, at: lift, time: rig.clock + 0.05)
+        #expect(rig.field.text == (hitTesting == .nearest ? "g" : ""), "\(hitTesting)")
+    }
+
+    @Test("Three overlapping fingers type in the order they landed, with lifts in every order")
+    func rollover() throws {
+        let orders = [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
+        for order in orders {
+            let rig = try Rig(autocapitalization: .none)
+            let t = try rig.point(rig.letter("t"))
+            let h = try rig.point(rig.letter("h"))
+            let e = try rig.point(rig.letter("e"))
+            let points = [1: t, 2: h, 3: e]
+            for id in 1...3 {
+                rig.view.touchDown(id, at: points[id] ?? .zero, time: rig.clock)
+                rig.clock += 0.03
+            }
+            #expect(rig.field.text == "th", "each finger's landing commits the one before it")
+            for id in order {
+                rig.view.touchUp(id, at: points[id] ?? .zero, time: rig.clock)
+                rig.clock += 0.03
+            }
+            #expect(rig.field.text == "the", "lifts in the order \(order)")
+        }
+    }
+
+    @Test("Several fingers down hold several keys: each is drawn pressed until its own finger lifts")
+    func heldKeys() throws {
+        let rig = try Rig(autocapitalization: .none, text: "abc")
+        let shift = try rig.index(of: .shift)
+        let delete = try rig.index(of: .delete)
+        let metrics = rig.layout.metrics
+        // Shift and Delete are both function keys: the same fill at rest and the same pressed fill.
+        let style = KeyStyle.of(.shift, returnKey: .standard, appearance: rig.view.appearance, metrics: metrics)
+        let pressed = KeyboardDrawingTests.expectedColor(try #require(style.pressedFill))
+        let rest = KeyboardDrawingTests.expectedColor(style.fill)
+        #expect(KeyStyle.of(.delete, returnKey: .standard, appearance: rig.view.appearance, metrics: metrics) == style)
+        rig.view.touchDown(1, at: try rig.point(.delete), time: rig.clock)
+        rig.view.touchDown(2, at: try rig.point(.shift), time: rig.clock + 0.05)
+        #expect(rig.typing.holds(delete) && rig.typing.holds(shift))
+        #expect(rig.view.faceLayers[delete].backgroundColor == pressed)
+        #expect(rig.view.faceLayers[shift].backgroundColor == pressed)
+        rig.view.touchUp(1, at: try rig.point(.delete), time: rig.clock + 0.1)
+        #expect(rig.view.faceLayers[delete].backgroundColor == rest)
+        #expect(rig.view.faceLayers[shift].backgroundColor == pressed)
+        rig.view.touchUp(2, at: try rig.point(.shift), time: rig.clock + 0.15)
+        #expect(rig.view.faceLayers[shift].backgroundColor == rest)
+    }
+
+    @Test("Shift held as a modifier is a gap in the engine: the first letter is upper case, the next lower case")
+    func shiftHeld() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let shift = try rig.point(.shift)
+        rig.view.touchDown(1, at: shift, time: rig.clock)
+        #expect(rig.typing.shiftState == .manual)
+        rig.view.touchDown(2, at: try rig.point(rig.letter("a")), time: rig.clock + 0.1)
+        rig.view.touchUp(2, at: try rig.point(rig.letter("a")), time: rig.clock + 0.15)
+        rig.view.touchDown(3, at: try rig.point(rig.letter("b")), time: rig.clock + 0.2)
+        rig.view.touchUp(3, at: try rig.point(rig.letter("b")), time: rig.clock + 0.25)
+        rig.view.touchUp(1, at: shift, time: rig.clock + 0.3)
+        // The engine has only a Shift tap, used up by the first letter (KeyTouches.swift records the gap). A Shift
+        // held as a modifier would type "AB" and turn off at the lift.
+        #expect(rig.field.text == "Ab")
+        #expect(rig.typing.shiftState == .off)
+    }
+
+    @Test("Delete held while another finger types: the hold ends when the finger lands, the letter types, no repeat")
+    func deleteHeldWhileTyping() throws {
+        let rig = try Rig(autocapitalization: .none, text: "abcdef")
+        let delete = try rig.point(.delete)
+        let x = try rig.point(rig.letter("x"))
+        let start = rig.clock
+        rig.view.touchDown(1, at: delete, time: start)
+        #expect(rig.field.text == "abcde")
+        let first = try #require(rig.scheduler.requested)
+        rig.typing.tick(at: first)
+        #expect(rig.field.text == "abcd")
+        rig.view.touchDown(2, at: x, time: first + 0.05)
+        #expect(rig.scheduler.requested == nil, "the landing finger ends the hold")
+        rig.typing.tick(at: first + 1)
+        #expect(rig.field.text == "abcd", "a late tick deletes nothing")
+        rig.view.touchUp(2, at: x, time: first + 0.1)
+        #expect(rig.field.text == "abcdx")
+        rig.view.touchUp(1, at: delete, time: first + 0.2)
+        #expect(rig.field.text == "abcdx", "Delete's own lift deletes nothing more")
+        #expect(rig.scheduler.requested == nil)
+    }
+
+    @Test("A cancel among several fingers: nothing lost, doubled or left repeating")
+    func cancelAmongSeveral() throws {
+        let rig = try Rig(autocapitalization: .none, text: "ab")
+        let t = try rig.point(rig.letter("t"))
+        let h = try rig.point(rig.letter("h"))
+        let delete = try rig.point(.delete)
+        rig.view.touchDown(1, at: t, time: rig.clock)
+        rig.view.touchDown(2, at: h, time: rig.clock + 0.03)
+        rig.view.touchDown(3, at: delete, time: rig.clock + 0.06)
+        #expect(rig.field.text == "abt", "t and h are committed by the landings after them; Delete deletes h")
+        #expect(rig.scheduler.requested != nil)
+        rig.view.touchCancel(3, time: rig.clock + 0.09)
+        #expect(rig.scheduler.requested == nil, "the cancelled Delete stops repeating")
+        rig.view.touchCancel(1, time: rig.clock + 0.09)
+        rig.view.touchUp(2, at: h, time: rig.clock + 0.12)
+        #expect(rig.field.text == "abt", "the finished fingers' cancel and lift type nothing more")
+        try rig.tap(rig.letter("e"))
+        #expect(rig.field.text == "abte")
     }
 }
 

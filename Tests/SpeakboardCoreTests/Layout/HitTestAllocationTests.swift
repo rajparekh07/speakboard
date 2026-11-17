@@ -47,7 +47,7 @@ struct HitTestAllocationTests {
     }
 
     @Test(
-        "Many hit-tests on every layout make zero heap allocations",
+        "Many hit-tests, exact and nearest, on every layout make zero heap allocations",
         .enabled(
             if: counterAvailable,
             """
@@ -91,6 +91,9 @@ struct HitTestAllocationTests {
 
         var hits = 0
         var misses = 0
+        var nearestHits = 0
+        var nearestMisses = 0
+        var nearestKeys = 0
         var checksum = 0.0
         let rounds = 10
 
@@ -112,6 +115,15 @@ struct HitTestAllocationTests {
                     } else {
                         misses &+= 1
                     }
+                    // The nearest-key hit-test (KEY-24), on the same points, through both of its entry points.
+                    if let index = layout.keyIndex(nearest: grid[pointIndex]) {
+                        nearestHits &+= 1
+                        checksum += Double(index)
+                    } else {
+                        nearestMisses &+= 1
+                    }
+                    if layout.key(nearest: grid[pointIndex]) != nil { nearestKeys &+= 1 }
+                    if layout.keyIndex(at: grid[pointIndex], by: .nearest) != nil { nearestKeys &+= 1 }
                     pointIndex += 1
                 }
                 index += 1
@@ -123,6 +135,10 @@ struct HitTestAllocationTests {
         let total = hits + misses
         #expect(total == rounds * points.reduce(0) { $0 + $1.count }, "the loop did not run every hit-test")
         #expect(hits > 0 && misses > 0 && Self.keep(checksum) > 0)
+        #expect(nearestHits + nearestMisses == total)
+        #expect(nearestHits > hits, "the nearest-key hit-test finds keys in gaps the exact one misses")
+        #expect(nearestMisses > 0, "the strip and points off the view")
+        #expect(nearestKeys == 2 * nearestHits)
         #expect(allocations == 0, "\(total) hit-tests made \(allocations) heap allocations")
     }
 }

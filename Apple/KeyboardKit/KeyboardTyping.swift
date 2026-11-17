@@ -10,7 +10,7 @@ public protocol TickScheduler: AnyObject {
     func requestTick(at time: TimeInterval?, for typing: KeyboardTyping)
 }
 
-/// Told when the typing state the view draws (Shift, the held key, the return key) may have changed.
+/// Told when the typing state the view draws (Shift, the held keys, the return key) may have changed.
 @MainActor
 public protocol KeyboardTypingObserver: AnyObject {
     /// The state changed; read it from the `KeyboardTyping`.
@@ -18,20 +18,24 @@ public protocol KeyboardTypingObserver: AnyObject {
 }
 
 /// The keyboard's adapter between touches and the field (ADR-0005: the Apple side is thin). Touches arrive as plain
-/// points in the layout's coordinates and times in seconds; the core's hit-test finds the key, the core's typing
-/// engine turns it into text operations, and this applies them to the field at once, in the same call: first the
-/// backward deletes, then one insertion.
+/// points in the layout's coordinates and times in seconds. The core's touch bookkeeping (`KeyTouches`) finds the key
+/// under each finger with the nearest-key hit-test and says which key events the touches make, and when; the core's
+/// typing engine turns each event into text operations; and this applies them to the field at once, in the same call:
+/// first the backward deletes, then one insertion.
 ///
-/// What it does with touches, one finger at a time:
-/// - A letter, the space bar and Return act when the finger lifts, on the key under it then (a finger that slides
-///   off every key types nothing). Shift acts when the finger lands. Delete deletes when the finger lands and repeats
-///   until it lifts: `.deleteDown`, then `.tick` at each time the engine asks for, then `.deleteUp`.
-/// - A finger that is cancelled (`touchesCancelled`) types nothing; on Delete it still sends `.deleteUp`.
-/// - A second finger landing while the first is down finishes the first at once, as if it had lifted where it is,
-///   then becomes the finger this follows. The first finger's own lift is then ignored. So fast two-thumb typing
-///   neither loses nor doubles a letter, and a second finger ends a Delete hold.
+/// The rules for touches are `KeyTouches`'s (KEY-24), in short:
+/// - Every point below the suggestion strip belongs to a key (`KeyboardLayout.keyIndex(nearest:)`), so a finger that
+///   lands, moves or lifts in a gap between keys still has a key.
+/// - A letter, the space bar and Return act when the finger lifts, on the key under it then. Shift acts when the
+///   finger lands. Delete deletes when the finger lands and repeats until it lifts: `.deleteDown`, then `.tick` at
+///   each time the engine asks for, then `.deleteUp`.
+/// - Several fingers: each is followed by its identity, and a finger's key is committed at its own lift or when a
+///   later finger lands, whichever comes first, so keys come out in the order the fingers landed. A later finger
+///   landing ends a Delete hold.
+/// - A cancelled finger types nothing; on Delete it still sends `.deleteUp`.
 /// - The "123" key, the emoji key, Apple's dictation key and the next-keyboard key type nothing here (KEY-62 does
 ///   not cover them; the next-keyboard key is the view's, through UIKit). The engine has no event for them yet.
+/// - Shift held as a modifier is not modelled: the engine has only a Shift tap (see `KeyTouches`).
 ///
 /// The engine lives for one field session (KeyEvent's notes): `beginFieldSession(at:)` makes a fresh one, and
 /// `textDidChange(at:)` makes a fresh one when the field's document changed, and otherwise sends `.contextChanged`.
@@ -43,18 +47,25 @@ public final class KeyboardTyping {
     public let locale: KeyboardLocale
     /// The engine's state for this field session.
     public private(set) var engine: TypingEngine
-    /// The layout touches are hit-tested against. Nil: touches do nothing.
-    public var layout: KeyboardLayout?
+    /// The layout touches are hit-tested against. Nil: touches do nothing. A new layout (another device class or
+    /// orientation) drops every finger down, as if cancelled: their key indices were the old layout's.
+    public var layout: KeyboardLayout? {
+        didSet { apply(touches.endAll(), at: lastTime) }
+    }
     /// Told when the drawn state may have changed.
     public weak var observer: KeyboardTypingObserver?
-
-    /// The index in `layout.keys` of the key under the finger being followed, or nil.
-    public private(set) var heldKeyIndex: Int?
+    /// Which hit-test finds the key under a finger: `.nearest`, unless a test asks for `.exact`, the hit-test before
+    /// KEY-24, to show what the nearest-key rule changes.
+    public var hitTesting: HitTesting {
+        get { touches.hitTesting }
+        set { touches.hitTesting = newValue }
+    }
 
     private let scheduler: TickScheduler
-    private var activeTouch: Int?
-    private var activeKind: KeyKind?
+    private var touches = KeyTouches()
     private var sessionDocument: UUID?
+    /// The time of the last event sent, for the `.deleteUp` a layout change sends.
+    private var lastTime: TimeInterval = 0
 
     /// An adapter for `field`, typing with `locale`'s rules, or nil if the core has no typing rules for it.
     public init?(field: KeyboardTextField, scheduler: TickScheduler, locale: KeyboardLocale = .english) {
@@ -71,15 +82,20 @@ public final class KeyboardTyping {
     /// The return key's state to draw, for the field as it is now.
     public var returnKey: ReturnKeyState { engine.returnKey(in: field.typingContext) }
 
-    /// The keyboard appeared: a fresh engine for this field session, which then reads the field.
+    /// Whether a finger is on key `index` of the layout, so it is drawn held. Several keys can be held at once.
+    public func holds(_ index: Int) -> Bool {
+        touches.holds(index)
+    }
+
+    /// The keyboard appeared: a fresh engine for this field session, which then reads the field. Fingers still down
+    /// from before are forgotten.
     public func beginFieldSession(at time: TimeInterval) {
         if let engine = TypingEngine(locale: locale) { self.engine = engine }
         sessionDocument = field.documentIdentifier
-        activeTouch = nil
-        activeKind = nil
-        heldKeyIndex = nil
+        _ = touches.endAll()
         scheduler.requestTick(at: nil, for: self)
         send(.contextChanged, at: time)
+        notify()
     }
 
     /// The field's text or selection changed outside the keyboard (`textDidChange`, `selectionDidChange`). Another
@@ -94,87 +110,54 @@ public final class KeyboardTyping {
         }
         if sessionDocument == nil { sessionDocument = current }
         send(.contextChanged, at: time)
+        notify()
     }
 
-    /// The keyboard is going away: the finger being followed types nothing more, and a Delete hold ends, as if the
-    /// touch were cancelled, in case UIKit does not cancel it.
+    /// The keyboard is going away: no finger types anything more, and a Delete hold ends, as if every touch were
+    /// cancelled, in case UIKit does not cancel them.
     public func endTouches(at time: TimeInterval) {
-        if activeTouch != nil { finishActiveTouch(commit: false, at: time) }
+        apply(touches.endAll(), at: time)
         scheduler.requestTick(at: nil, for: self)
     }
 
     /// A finger landed at `point`. `touch` names the finger until it lifts.
     public func touchBegan(_ touch: Int, at point: LayoutPoint, time: TimeInterval) {
-        if activeTouch != nil { finishActiveTouch(commit: true, at: time) }
-        activeTouch = touch
-        let index = keyIndex(at: point)
-        heldKeyIndex = index
-        activeKind = index.flatMap { layout?.keys[$0].kind }
-        switch activeKind {
-        case .shift?: send(.shift, at: time)
-        case .delete?: send(.deleteDown, at: time)
-        default: notify()
-        }
+        guard let layout else { return }
+        apply(touches.began(touch, at: point, in: layout), at: time)
     }
 
     /// The finger `touch` moved to `point`. A letter, the space bar or Return under it now is the one it will type.
     public func touchMoved(_ touch: Int, to point: LayoutPoint, time: TimeInterval) {
-        guard touch == activeTouch else { return }
-        switch activeKind {
-        case .shift?, .delete?: return
-        default: break
-        }
-        let index = keyIndex(at: point)
-        if index != heldKeyIndex {
-            heldKeyIndex = index
-            activeKind = index.flatMap { layout?.keys[$0].kind }
-            notify()
-        }
+        guard let layout else { return }
+        if touches.moved(touch, to: point, in: layout) { notify() }
     }
 
     /// The finger `touch` lifted at `point`.
     public func touchEnded(_ touch: Int, at point: LayoutPoint, time: TimeInterval) {
-        guard touch == activeTouch else { return }
-        touchMoved(touch, to: point, time: time)
-        finishActiveTouch(commit: true, at: time)
+        guard let layout else { return }
+        apply(touches.ended(touch, at: point, in: layout), at: time)
     }
 
     /// The finger `touch` was cancelled: it types nothing, and ends a Delete hold.
     public func touchCancelled(_ touch: Int, time: TimeInterval) {
-        guard touch == activeTouch else { return }
-        finishActiveTouch(commit: false, at: time)
+        apply(touches.cancelled(touch), at: time)
     }
 
     /// The scheduler's timer fired, at `time`.
     public func tick(at time: TimeInterval) {
         send(.tick, at: time)
+        notify()
     }
 
-    private func finishActiveTouch(commit: Bool, at time: TimeInterval) {
-        let kind = activeKind
-        activeTouch = nil
-        activeKind = nil
-        heldKeyIndex = nil
-        switch kind {
-        case .letter(let scalar)? where commit: send(.character(scalar), at: time)
-        case .space? where commit: send(.space, at: time)
-        case .returnKey? where commit: send(.returnKey, at: time)
-        case .delete?: send(.deleteUp, at: time)
-        default: notify()
-        }
-    }
-
-    private func keyIndex(at point: LayoutPoint) -> Int? {
-        guard let layout, let key = layout.key(at: point) else { return nil }
-        var index = 0
-        while index < layout.keys.count {
-            if layout.keys[index].frame == key.frame { return index }
-            index += 1
-        }
-        return nil
+    /// Sends the events in order, then tells the observer once: the held keys may have changed even with no event.
+    private func apply(_ events: KeyEvents, at time: TimeInterval) {
+        if let first = events.first { send(first, at: time) }
+        if let second = events.second { send(second, at: time) }
+        notify()
     }
 
     private func send(_ event: KeyEvent, at time: TimeInterval) {
+        lastTime = time
         let output = engine.handle(event, at: time, in: field.typingContext)
         var deletes = output.deleteCount
         while deletes > 0 {
@@ -183,7 +166,6 @@ public final class KeyboardTyping {
         }
         if !output.insertion.isEmpty { field.insertText(output.insertion) }
         scheduler.requestTick(at: output.nextTick, for: self)
-        notify()
     }
 
     private func notify() {

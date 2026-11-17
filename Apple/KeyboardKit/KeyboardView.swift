@@ -20,7 +20,8 @@ import UIKit
 ///
 /// Touches reach the typing adapter (`KeyboardTyping`) as plain points and times through `touchDown`, `touchMove`,
 /// `touchUp` and `touchCancel`, which `touchesBegan`, `touchesMoved`, `touchesEnded` and `touchesCancelled` call, so
-/// tests can drive the real view without UIKit's touch objects. The "123", emoji and dictation keys are drawn and do
+/// tests can drive the real view without UIKit's touch objects. Each touch is named by its `UITouch` object's
+/// identity, so several fingers are followed at once (KEY-24); every key a finger is on is drawn held. The "123", emoji and dictation keys are drawn and do
 /// nothing (KEY-62 does not cover them). The next-keyboard key is drawn only when `showsInputModeSwitchKey` is true
 /// (the input view controller's `needsInputModeSwitchKey`), and hands its touches to `inputModeListHandler`.
 public final class KeyboardView: UIView, KeyboardTypingObserver {
@@ -192,7 +193,7 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
         let bounds = CGRect(origin: .zero, size: frame.size)
         faceLayer.frame = frame
         faceLayer.isHidden = key.kind == .globe && !showsInputModeSwitchKey
-        let held = typing?.heldKeyIndex == index
+        let held = typing?.holds(index) ?? false
         let fill = held ? (style.fill(pressed: true) ?? style.fill) : style.fill
         faceLayer.backgroundColor = Self.cgColor(fill)
         faceLayer.cornerRadius = CGFloat(style.cornerRadius.value)
@@ -376,13 +377,17 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
         LayoutPoint(x: Double(point.x), y: Double(point.y))
     }
 
+    /// A touch's identity: its `UITouch` object's address, which UIKit keeps for one finger from landing to lift.
     private static func id(_ touch: UITouch) -> Int {
-        ObjectIdentifier(touch).hashValue
+        Int(bitPattern: ObjectIdentifier(touch))
     }
 
+    /// Whether a touch at `point` is on the next-keyboard key, by the same hit-test as typing (the nearest key).
     private func isInputModeKey(at point: CGPoint) -> Bool {
-        guard showsInputModeSwitchKey, let key = layout?.key(at: Self.layoutPoint(point)) else { return false }
-        return key.kind == .globe
+        guard showsInputModeSwitchKey, let layout,
+            let index = layout.keyIndex(at: Self.layoutPoint(point), by: typing?.hitTesting ?? .nearest)
+        else { return false }
+        return layout.keys[index].kind == .globe
     }
 
     /// Sends this touch to the next-keyboard handler if it began on that key.
