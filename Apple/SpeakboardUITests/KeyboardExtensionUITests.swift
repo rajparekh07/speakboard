@@ -186,13 +186,15 @@ final class KeyboardExtensionUITests: XCTestCase {
         try keyboard.tap(.delete)
         expectValue(field, "Hi. O", "after two deletes")
 
-        // Hit targets (KEY-24): Shift off, then a tap in the gap between the "g" row and the row below it, a quarter
-        // of the way down, and one in the margin left of "a". Each types its nearest letter.
+        // Hit targets (KEY-24): Shift off, then a tap in the gap between the "g" row and the row below it, 0.45 of
+        // the way down (near the middle of the gap, on the "g" side, so a small mapping error cannot put it on the
+        // key), and one in the margin left of "a". Each types its nearest letter.
         try keyboard.tap(.shift)
+        let gapFraction = 0.45
         let g = try keyboard.frame(.letter("g"))
         let b = try keyboard.frame(.letter("b"))
         try keyboard.tap(
-            gap: LayoutPoint(x: g.center.x, y: g.maxY + (b.minY - g.maxY) / 4), expecting: .letter("g"),
+            gap: LayoutPoint(x: g.center.x, y: g.maxY + (b.minY - g.maxY) * gapFraction), expecting: .letter("g"),
             "the gap below g")
         let a = try keyboard.frame(.letter("a"))
         try keyboard.tap(

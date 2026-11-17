@@ -146,19 +146,9 @@ struct KeyStyleTests {
         var checksum = 0.0
         var count = 0
 
-        // One uncounted lookup of each kind, face and appearance first. With the KEY-24 tests added, this test once
-        // counted 1 allocation, and passed on the next runs: which test first runs a piece of code depends on the
-        // order the tests run in, and the Swift runtime does some work once per process on first use (type metadata,
-        // globals). The likely cause, not proven; either way a one-time cost, not a lookup's.
-        for kind in kinds {
-            for face in faces {
-                for appearance in appearances {
-                    checksum +=
-                        KeyStyle.of(kind, returnKey: face, appearance: appearance, metrics: metrics[0]).fill.color.red
-                }
-            }
-        }
-
+        // No warm-up. Once, in KEY-24, one local run of the whole suite counted 1 allocation here; the cause is
+        // unknown. This test alone in a fresh process, with no warm-up, counts 0, and 8 runs of the whole suite with
+        // no warm-up passed (KEY-24 review round 1, and the builder again). If it recurs, record the count.
         // `while` loops, not `for`-`in`: see HitTestAllocationTests.
         allocation_counter_start()
         var m = 0

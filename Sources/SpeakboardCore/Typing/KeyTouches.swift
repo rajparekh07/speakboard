@@ -31,7 +31,11 @@
 // last to land, and keys are committed in the order the fingers landed whatever
 // order they lift in: "t", "h" and "e" overlapping type "the". Recalled, not
 // measured: that Apple's keyboard commits a held key when the next finger
-// lands. Assumption, for a device test (rung 4).
+// lands. Assumption, for a device test (rung 4). This commit rule is KEY-62's
+// adapter's, unchanged: what is typed under rollover is the same as before
+// KEY-24 (review round 1 drove both adapters with the same touches). KEY-24
+// moved the bookkeeping here, gave touches the nearest-key hit-test, and has
+// every held key drawn.
 //
 // Not modelled (a gap for the typing engine, not decided here): Shift held as a
 // modifier. The engine has only a Shift tap (`KeyEvent.shift`), so holding
@@ -39,7 +43,8 @@
 // is on, then used up) and the next ones lower case, and lifting Shift does
 // nothing. The engine would need Shift down and up events and a rule: letters
 // typed while Shift is held are upper case; lifting Shift after typing turns it
-// off (caps lock aside); lifting it without typing is a tap.
+// off (caps lock aside); lifting it without typing is a tap. The engine's own
+// note on it is at `KeyEvent` (TypingEngine.swift); the ticket is KEY-66.
 //
 // Allocates nothing while at most `capacity` fingers are down: the touches are
 // kept in an array whose storage is reserved when the value is made, and every
@@ -50,7 +55,7 @@ public struct KeyTouch: Equatable, Sendable {
     /// The finger's identity, from the caller: the same number from landing to lift.
     public let id: Int
     /// The index in the layout's `keys` of the key under the finger: where it landed, then where it moved while
-    /// open. Nil when it is on no key (the suggestion strip, or anywhere with the exact hit-test).
+    /// open. Nil when it is on no key (outside the layout's `touchArea`, or in a gap with the exact hit-test).
     public internal(set) var keyIndex: Int?
     /// The kind of that key.
     public internal(set) var kind: KeyKind?
@@ -89,9 +94,13 @@ public struct KeyTouches: Sendable {
     /// How many fingers can be down at once without allocating. More still work.
     public static let capacity = 16
 
-    /// Which hit-test finds the key under a finger. `.nearest` (the default) gives every point below the suggestion
-    /// strip a key; `.exact` is the hit-test before KEY-24, for tests.
+    /// Which hit-test finds the key under a finger. `.nearest` (the default) gives every point of the layout's
+    /// `touchArea` a key; `.exact` is the hit-test before KEY-24, for tests.
     public var hitTesting: HitTesting
+    /// Whether the next-keyboard (globe) key is shown. When false it is no key: touches on it and in the gaps around
+    /// it go to its visible neighbours (`KeyboardLayout.keyIndex(nearest:showsInputModeSwitchKey:)`). The keyboard
+    /// view sets it from UIKit's `needsInputModeSwitchKey`.
+    public var showsInputModeSwitchKey = true
     /// Every finger down, in the order they landed.
     public private(set) var touches: [KeyTouch] = []
 
@@ -118,7 +127,7 @@ public struct KeyTouches: Sendable {
         var events = KeyEvents()
         events.append(finishOpen(commit: true))
         if let stale = position(of: id) { touches.remove(at: stale) }
-        let keyIndex = layout.keyIndex(at: point, by: hitTesting)
+        let keyIndex = layout.keyIndex(at: point, by: hitTesting, showsInputModeSwitchKey: showsInputModeSwitchKey)
         let kind = Self.kind(at: keyIndex, in: layout)
         touches.append(KeyTouch(id: id, keyIndex: keyIndex, kind: kind, landedOn: kind, isOpen: true))
         switch kind {
@@ -137,7 +146,7 @@ public struct KeyTouches: Sendable {
         case .shift?, .delete?: return false
         default: break
         }
-        let keyIndex = layout.keyIndex(at: point, by: hitTesting)
+        let keyIndex = layout.keyIndex(at: point, by: hitTesting, showsInputModeSwitchKey: showsInputModeSwitchKey)
         guard keyIndex != touches[position].keyIndex else { return false }
         touches[position].keyIndex = keyIndex
         touches[position].kind = Self.kind(at: keyIndex, in: layout)

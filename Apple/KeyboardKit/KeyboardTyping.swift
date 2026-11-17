@@ -24,14 +24,16 @@ public protocol KeyboardTypingObserver: AnyObject {
 /// first the backward deletes, then one insertion.
 ///
 /// The rules for touches are `KeyTouches`'s (KEY-24), in short:
-/// - Every point below the suggestion strip belongs to a key (`KeyboardLayout.keyIndex(nearest:)`), so a finger that
-///   lands, moves or lifts in a gap between keys still has a key.
+/// - Every point of the layout's `touchArea` (below the suggestion strip, out to one row gap beyond the outermost keys)
+///   belongs to a key (`KeyboardLayout.keyIndex(nearest:)`), so a finger that lands, moves or lifts in a gap between
+///   keys still has a key. A hidden next-keyboard key takes no touches.
 /// - A letter, the space bar and Return act when the finger lifts, on the key under it then. Shift acts when the
 ///   finger lands. Delete deletes when the finger lands and repeats until it lifts: `.deleteDown`, then `.tick` at
 ///   each time the engine asks for, then `.deleteUp`.
 /// - Several fingers: each is followed by its identity, and a finger's key is committed at its own lift or when a
 ///   later finger lands, whichever comes first, so keys come out in the order the fingers landed. A later finger
-///   landing ends a Delete hold.
+///   landing ends a Delete hold. This is KEY-62's commit rule, unchanged in what it types; KEY-24 moved it into the
+///   core and draws every held key.
 /// - A cancelled finger types nothing; on Delete it still sends `.deleteUp`.
 /// - The "123" key, the emoji key, Apple's dictation key and the next-keyboard key type nothing here (KEY-62 does
 ///   not cover them; the next-keyboard key is the view's, through UIKit). The engine has no event for them yet.
@@ -59,6 +61,12 @@ public final class KeyboardTyping {
     public var hitTesting: HitTesting {
         get { touches.hitTesting }
         set { touches.hitTesting = newValue }
+    }
+    /// Whether the next-keyboard key is shown; when it is not, it takes no touches and the gaps around it go to its
+    /// neighbours. The view sets it from its own `showsInputModeSwitchKey`.
+    public var showsInputModeSwitchKey: Bool {
+        get { touches.showsInputModeSwitchKey }
+        set { touches.showsInputModeSwitchKey = newValue }
     }
 
     private let scheduler: TickScheduler

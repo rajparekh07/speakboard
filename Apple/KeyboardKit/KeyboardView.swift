@@ -21,7 +21,7 @@ import UIKit
 /// Touches reach the typing adapter (`KeyboardTyping`) as plain points and times through `touchDown`, `touchMove`,
 /// `touchUp` and `touchCancel`, which `touchesBegan`, `touchesMoved`, `touchesEnded` and `touchesCancelled` call, so
 /// tests can drive the real view without UIKit's touch objects. Each touch is named by its `UITouch` object's
-/// identity, so several fingers are followed at once (KEY-24); every key a finger is on is drawn held. The "123", emoji and dictation keys are drawn and do
+/// identity, so each finger is followed by its own identity, and every key a finger is on is drawn held (KEY-24). The "123", emoji and dictation keys are drawn and do
 /// nothing (KEY-62 does not cover them). The next-keyboard key is drawn only when `showsInputModeSwitchKey` is true
 /// (the input view controller's `needsInputModeSwitchKey`), and hands its touches to `inputModeListHandler`.
 public final class KeyboardView: UIView, KeyboardTypingObserver {
@@ -37,6 +37,7 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
     /// Whether to draw the next-keyboard key (`needsInputModeSwitchKey`).
     public var showsInputModeSwitchKey = false {
         didSet {
+            typing?.showsInputModeSwitchKey = showsInputModeSwitchKey
             if showsInputModeSwitchKey != oldValue { redrawAll() }
         }
     }
@@ -89,6 +90,7 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
         accessibilityLabel = "Speakboard keyboard"
         accessibilityTraits = .allowsDirectInteraction
         typing?.observer = self
+        typing?.showsInputModeSwitchKey = showsInputModeSwitchKey
         registerForTraitChanges(
             [UITraitUserInterfaceStyle.self, UITraitDisplayScale.self], action: #selector(appearanceTraitsChanged))
         syncAppearance()
@@ -507,7 +509,9 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
     /// Whether a touch at `point` is on the next-keyboard key, by the same hit-test as typing (the nearest key).
     private func isInputModeKey(at point: CGPoint) -> Bool {
         guard showsInputModeSwitchKey, let layout,
-            let index = layout.keyIndex(at: Self.layoutPoint(point), by: typing?.hitTesting ?? .nearest)
+            let index = layout.keyIndex(
+                at: Self.layoutPoint(point), by: typing?.hitTesting ?? .nearest,
+                showsInputModeSwitchKey: showsInputModeSwitchKey)
         else { return false }
         return layout.keys[index].kind == .globe
     }
@@ -519,7 +523,9 @@ public final class KeyboardView: UIView, KeyboardTypingObserver {
         if inputModeTouch == id, let event { inputModeListHandler?(self, event) }
     }
 
-    /// See `touchDown`.
+    /// See `touchDown`. Fingers land in the order UIKit delivers them. Two fingers that land in the same touch event
+    /// have no landing order (they have the same timestamp), and are taken in the order of the set, which is not
+    /// defined: their keys may be typed in either order.
     public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             forwardInputModeTouch(touch, event, began: true)

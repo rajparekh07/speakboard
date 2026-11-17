@@ -62,12 +62,14 @@ struct KeyTouchesAllocationTests {
         }
         #expect(reachedCapacity, "the script never had 16 fingers down")
 
-        // The replay runs twice, on a fresh value each time, and only the second run is counted. The first run makes
-        // the Swift runtime build the type metadata the code uses (for `Optional<KeyEvent>` and the rest), which it
-        // does once per process, on first use: a first, uncounted run allocated 15 times here, and the same run again
-        // allocated nothing. That is a one-time cost, not a keystroke's.
+        // One uncounted `endAll()` on a scratch value first. The first `endAll()` in a process allocates (17 to 23
+        // times, measured in a fresh process, debug build, Linux: in `removeAll(keepingCapacity:)`), and a second one
+        // allocates nothing. Nothing else allocates on first use: in a fresh process the first landing, move, lift,
+        // commit by a landing, Delete landing and cancel each counted 0 (KEY-24 review round 1, reproduced by the
+        // builder). `endAll()` is not on the keystroke path: the adapter calls it when the keyboard appears or goes
+        // away and when the layout changes. So the counted replay below is the process's first use of everything else.
         var warmUp = KeyTouches()
-        _ = Self.replay(operations, on: &warmUp, in: layout)
+        _ = warmUp.endAll()
         var touches = KeyTouches()
         allocation_counter_start()
         let (events, changes, held) = Self.replay(operations, on: &touches, in: layout)

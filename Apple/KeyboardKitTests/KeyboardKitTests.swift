@@ -407,6 +407,26 @@ struct KeyboardTouchTests {
         #expect(rig.scheduler.requested == nil)
     }
 
+    @Test("A hidden next-keyboard key takes no touch: a finger on it holds its neighbour; shown, it holds the key")
+    func hiddenInputModeSwitchKey() throws {
+        let rig = try Rig(deviceClass: .iphone375x667, autocapitalization: .none)
+        let globe = try rig.index(of: .globe)
+        let modeSwitch = try rig.index(of: .modeSwitch)
+        let frame = try rig.frame(.globe)
+        let leftHalf = Rig.cgPoint(LayoutPoint(x: frame.minX + 1, y: frame.center.y))
+        #expect(!rig.view.showsInputModeSwitchKey)
+        #expect(!rig.typing.showsInputModeSwitchKey, "the view tells the adapter")
+        rig.view.touchDown(1, at: leftHalf, time: rig.clock)
+        #expect(!rig.typing.holds(globe) && rig.typing.holds(modeSwitch))
+        rig.view.touchUp(1, at: leftHalf, time: rig.clock + 0.05)
+        rig.view.showsInputModeSwitchKey = true
+        #expect(rig.typing.showsInputModeSwitchKey)
+        rig.view.touchDown(2, at: leftHalf, time: rig.clock + 0.1)
+        #expect(rig.typing.holds(globe) && !rig.typing.holds(modeSwitch))
+        rig.view.touchUp(2, at: leftHalf, time: rig.clock + 0.15)
+        #expect(rig.field.text == "")
+    }
+
     @Test("A cancel among several fingers: nothing lost, doubled or left repeating")
     func cancelAmongSeveral() throws {
         let rig = try Rig(autocapitalization: .none, text: "ab")

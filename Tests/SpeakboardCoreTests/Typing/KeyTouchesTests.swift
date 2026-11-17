@@ -349,4 +349,22 @@ struct KeyTouchesTests {
             #expect(text == "The", "lifts in the order \(order)")
         }
     }
+
+    @Test("A hidden next-keyboard key takes no finger: a finger on it is on its visible neighbour")
+    func hiddenInputModeSwitchKey() throws {
+        var board = try Board(.iphone375x667)
+        let globe = try board.key(.globe)
+        let globeIndex = try #require(board.layout.keys.firstIndex(of: globe))
+        board.down(1, globe.frame.center)
+        #expect(board.touches.holds(globeIndex), "shown: the globe key")
+        board.up(1, globe.frame.center)
+        board.touches.showsInputModeSwitchKey = false
+        board.down(2, LayoutPoint(x: globe.frame.minX + 1, y: globe.frame.center.y))
+        #expect(!board.touches.holds(globeIndex))
+        #expect(board.touches.touches.first?.kind == .modeSwitch)
+        board.move(2, LayoutPoint(x: globe.frame.maxX - 1, y: globe.frame.center.y))
+        #expect(board.touches.touches.first?.kind == .dictation)
+        board.up(2, LayoutPoint(x: globe.frame.maxX - 1, y: globe.frame.center.y))
+        #expect(board.events.isEmpty, "123, globe and dictation type nothing")
+    }
 }
