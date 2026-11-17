@@ -7,17 +7,21 @@
 # list of steps (CHECK_STEPS) and one recipe per step.
 #
 # Keep this file to GNU make 3.81, the make macOS ships.
+#
+# Every variable a check step uses is declared `override`, so a value given on
+# the command line (make check RUN= ..., SWIFT_TAG=..., CHECK_STEPS=...) is
+# ignored and cannot route make check around the pinned image or its steps.
 
 # The Swift image, pinned to an exact Swift version and Ubuntu release.
-SWIFT_TAG := 6.4.2-resolute
-SWIFT_IMAGE := swift:$(SWIFT_TAG)
+override SWIFT_TAG := 6.4.2-resolute
+override SWIFT_IMAGE := swift:$(SWIFT_TAG)
 # The Swift version alone (6.4.2), which make check-native requires of the
 # active toolchain.
-SWIFT_VERSION := $(firstword $(subst -, ,$(SWIFT_TAG)))
+override SWIFT_VERSION := $(firstword $(subst -, ,$(SWIFT_TAG)))
 
 # Runs a command in the Swift image with the repo mounted at /work, as the
 # calling user, so files in .build are not owned by root.
-SWIFT_RUN := docker run --rm -v "$(CURDIR)":/work -w /work \
+override SWIFT_RUN := docker run --rm -v "$(CURDIR)":/work -w /work \
 	--user "$$(id -u):$$(id -g)" -e HOME=/tmp $(SWIFT_IMAGE)
 
 # NATIVE=1 runs each step on the host, with no Docker: nothing depends on
@@ -31,21 +35,21 @@ ifeq ($(NATIVE),1)
 ifneq ($(filter check,$(if $(MAKECMDGOALS),$(MAKECMDGOALS),check)),)
 $(error make check runs only in the pinned Swift image, and NATIVE=1 is set (on the command line or in the environment). Run make check-native for the native path, or unset NATIVE)
 endif
-RUN :=
-DOCKER_READY :=
-FRONTEND := frontend="$$(scripts/native-tools.sh frontend)" && export SWIFT_FRONTEND="$$frontend" &&
+override RUN :=
+override DOCKER_READY :=
+override FRONTEND := frontend="$$(scripts/native-tools.sh frontend)" && export SWIFT_FRONTEND="$$frontend" &&
 else
-RUN := $(SWIFT_RUN)
-DOCKER_READY := docker-ready
-FRONTEND :=
+override RUN := $(SWIFT_RUN)
+override DOCKER_READY := docker-ready
+override FRONTEND :=
 endif
 
-FORMAT_PATHS := Package.swift Sources Tests scripts
+override FORMAT_PATHS := Package.swift Sources Tests scripts
 
 # The steps of a check, in order, for both paths. On the Docker path every step
 # but guard needs docker-ready first, so make check runs guard, docker-ready,
 # guard-deps, and on.
-CHECK_STEPS := guard guard-deps guard-imports metrics-check build test format-check
+override CHECK_STEPS := guard guard-deps guard-imports metrics-check build test format-check
 
 .PHONY: check check-native native-tools docker-ready guard guard-deps guard-imports metrics-check metrics build \
 	test format-check format clean
