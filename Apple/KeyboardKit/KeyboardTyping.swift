@@ -79,8 +79,14 @@ public final class KeyboardTyping {
     /// The Shift state to draw.
     public var shiftState: ShiftState { engine.shiftState }
 
-    /// The return key's state to draw, for the field as it is now.
+    /// The return key's state, for the field as it is now. It reads the field's whole context, the text before the
+    /// cursor included.
     public var returnKey: ReturnKeyState { engine.returnKey(in: field.typingContext) }
+
+    /// The return key's kind, which is all the view draws of it: `returnKey.kind`, read from the field's return key
+    /// type alone (the engine takes the kind from the context's `returnKeyType` as it is), without the text before the
+    /// cursor that `returnKey` reads.
+    public var returnKeyKind: ReturnKeyType { field.fieldReturnKeyType }
 
     /// Whether a finger is on key `index` of the layout, so it is drawn held. Several keys can be held at once.
     public func holds(_ index: Int) -> Bool {
@@ -99,9 +105,11 @@ public final class KeyboardTyping {
     }
 
     /// The field's text or selection changed outside the keyboard (`textDidChange`, `selectionDidChange`). Another
-    /// document means another field session, but only when one known identifier changes to another: the proxy has
-    /// none when the keyboard appears (seen in the simulator), so the first identifier to arrive is taken as this
-    /// session's, keeping the engine and the user's Shift, and the change is a context change.
+    /// document means another field session, but only when one known identifier changes to another. The proxy may
+    /// have none when the keyboard appears and one later (macOS CI has logged `appeared document=none`, then
+    /// `first-text-change document=present`), or one already (`appeared document=present`), so the first identifier
+    /// to arrive is taken as this session's, keeping the engine and the user's Shift, and the change is a context
+    /// change.
     public func textDidChange(at time: TimeInterval) {
         let current = field.documentIdentifier
         if let current, let sessionDocument, current != sessionDocument {
