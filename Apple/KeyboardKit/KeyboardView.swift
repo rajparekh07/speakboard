@@ -22,8 +22,9 @@ import UIKit
 /// `touchUp` and `touchCancel`, which `touchesBegan`, `touchesMoved`, `touchesEnded` and `touchesCancelled` call, so
 /// tests can drive the real view without UIKit's touch objects. Each touch is named by its `UITouch` object's
 /// identity, so each finger is followed by its own identity, and every key a finger is on is drawn held (KEY-24).
-/// The "123", emoji and dictation keys are drawn and do nothing (KEY-62 does not cover them). The next-keyboard key is drawn only when `showsInputModeSwitchKey` is true
-/// (the input view controller's `needsInputModeSwitchKey`), and hands its touches to `inputModeListHandler`.
+/// The "123", emoji and dictation keys are drawn and do nothing (KEY-62 does not cover them). The next-keyboard key
+/// is drawn only when `showsInputModeSwitchKey` is true (the input view controller's `needsInputModeSwitchKey`), and
+/// hands its touches to `inputModeListHandler`.
 public final class KeyboardView: UIView, KeyboardTypingObserver {
     /// The accessibility identifier of the keyboard, for UI tests.
     public static let accessibilityID = "SpeakboardKeyboard"

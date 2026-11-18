@@ -29,6 +29,9 @@ struct KeyTouchesAllocationTests {
         let layout = try englishLayout(.iphone402x874, .portrait)
         let (operations, reachedCapacity, reuses) = Self.script(for: layout, seed: 24)
         #expect(reachedCapacity, "the script never had 16 fingers down")
+        // Reuses of an identity still down (KEY-67). This layout has no next-keyboard key, so `showsInputModeSwitchKey`
+        // changes nothing here; the reuses on a layout with the key, hidden as the extension runs, are counted in
+        // `hiddenKeyTouchesAllocateNothing`. The stale-finger branch of `KeyTouches.began` does not read the flag.
         #expect(reuses > 50, "the script reused an identity still down \(reuses) times")
 
         // One uncounted `endAll()` on a scratch value first. The first `endAll()` in a process allocates (17 to 23

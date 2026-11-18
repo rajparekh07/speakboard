@@ -876,7 +876,9 @@ struct KeyboardRedrawTests {
             // `overrideUserInterfaceStyle` (KEY-62).
             let taken = rig.view.traitCollection.displayScale
             try #require(taken == scale, "the view reads display scale \(taken), not the override \(scale)")
-            // The registered trait change redraws, or the next layout pass does: either way, once.
+            // The registered trait change redraws, or the next layout pass does: either way, once. This call to
+            // `applyUserInterfaceStyle` is the test's own, so the test shows that a new scale redraws every key once,
+            // at that scale; it would still pass if `UITraitDisplayScale` were dropped from `registerForTraitChanges`.
             rig.view.applyUserInterfaceStyle(.light)
             Self.expectEveryKeyOnce(Self.writes(start, rig.view.layerWrites), rig.layout, "scale \(scale)")
             widths[scale] = try #require(rig.view.glyphImage(at: shift)).width
