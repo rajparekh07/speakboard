@@ -872,12 +872,10 @@ struct KeyboardRedrawTests {
             let start = rig.view.layerWrites
             rig.view.traitOverrides.displayScale = scale
             rig.view.updateTraitsIfNeeded()
+            // A view with no window takes a trait override on `traitOverrides` (macOS CI, KEY-67), though it ignores
+            // `overrideUserInterfaceStyle` (KEY-62).
             let taken = rig.view.traitCollection.displayScale
-            if taken != scale {
-                // EXPLORATION (KEY-67, first macOS run): a view with no window may not take a trait override.
-                print("warning: speakboard-explore: displayScale override \(scale) not taken: the view reads \(taken)")
-                return
-            }
+            try #require(taken == scale, "the view reads display scale \(taken), not the override \(scale)")
             // The registered trait change redraws, or the next layout pass does: either way, once.
             rig.view.applyUserInterfaceStyle(.light)
             Self.expectEveryKeyOnce(Self.writes(start, rig.view.layerWrites), rig.layout, "scale \(scale)")
@@ -889,6 +887,5 @@ struct KeyboardRedrawTests {
         let two = try #require(widths[2])
         let three = try #require(widths[3])
         #expect(abs(Double(three) * 2 - Double(two) * 3) <= 3, "Shift's glyph is \(two) px at 2x, \(three) px at 3x")
-        print("warning: speakboard-explore: displayScale override taken; shift glyph \(two) px at 2x, \(three) at 3x")
     }
 }
