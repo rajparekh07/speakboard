@@ -5,7 +5,8 @@
 # run's artifacts (KEY-54), but they can read its job log.
 #
 #   scripts/screenshots-to-log.sh print <screenshots dir>
-#       macOS only (sips, plutil). <screenshots dir> is what
+#       macOS only (scripts/screenshot-image.swift, compiled with xcrun
+#       swiftc, for the images; sips to check their size; plutil). <screenshots dir> is what
 #       scripts/sim-keyboard.sh wrote. Prints, in this order:
 #         keyboard-light.png, keyboard-dark.png
 #             keyboard.png and keyboard-dark.png (the keyboard extension in the
@@ -40,7 +41,7 @@
 # + = x - only, so the job-log tool's JSON escapes nothing in a block.
 #
 # Written for the bash 3.2 at /bin/bash and the tools macOS ships (sips,
-# plutil, base64, shasum), as well as Linux for `emit`.
+# plutil, base64, shasum) with Xcode's swiftc, as well as Linux for `emit`.
 set -euo pipefail
 
 fail() {
@@ -99,31 +100,18 @@ pixels() {
     printf '%s\n' "$value"
 }
 
-# crop <in> <out.png>: the bottom 2/5 of the screen, full width, full resolution.
-crop() {
-    local in="$1" out="$2" width height crop_height top
+# shape <in> <out> <png|jpeg> <divisor>: the bottom 2/5 of the screen, full
+# width, its width and height divided by <divisor>, by scripts/screenshot-image.swift
+# (compiled into $tool). Sets `note` to the crop's rows and the output's size,
+# and checks the size again with sips.
+shape() {
+    local in="$1" out="$2" format="$3" divisor="$4" width height
+    note=$("$tool" "$in" "$out" "$format" "$divisor") || fail "could not crop $in"
     width=$(pixels "$in" pixelWidth)
     height=$(pixels "$in" pixelHeight)
-    crop_height=$((height * 2 / 5))
-    top=$((height - crop_height))
-    sips --cropToHeightWidth "$crop_height" "$width" --cropOffset "$top" 0 "$in" --out "$out" > /dev/null 2>&1 \
-        || fail "sips could not crop $in"
-    [ "$(pixels "$out" pixelWidth)" = "$width" ] && [ "$(pixels "$out" pixelHeight)" = "$crop_height" ] \
-        || fail "the crop of $in is $(pixels "$out" pixelWidth)x$(pixels "$out" pixelHeight), not ${width}x$crop_height"
-    crop_note="rows $top to $((height - 1)) of ${width}x$height"
-}
-
-# half <in.png> <out.jpg>: half the width and height, JPEG.
-half() {
-    local in="$1" out="$2" width height scaled
-    width=$(pixels "$in" pixelWidth)
-    height=$(pixels "$in" pixelHeight)
-    scaled="$out.png"
-    sips --resampleWidth $((width / 2)) "$in" --out "$scaled" > /dev/null 2>&1 || fail "sips could not scale $in"
-    sips -s format jpeg -s formatOptions 70 "$scaled" --out "$out" > /dev/null 2>&1 \
-        || fail "sips could not make a JPEG of $in"
-    rm -f "$scaled"
-    half_note="$(pixels "$out" pixelWidth)x$(pixels "$out" pixelHeight)"
+    [ "$(pixels "$out" pixelWidth)" = "$((width / divisor))" ] \
+        && [ "$(pixels "$out" pixelHeight)" = "$((height * 2 / 5 / divisor))" ] \
+        || fail "$out is $(pixels "$out" pixelWidth)x$(pixels "$out" pixelHeight), not $((width / divisor))x$((height * 2 / 5 / divisor))"
 }
 
 # attachment <export dir> <attachment name>: the exported file of the UI test's
@@ -156,6 +144,9 @@ print_all() {
     [ -d "$dir" ] || fail "no screenshots folder $dir"
     work=$(mktemp -d)
     trap 'rm -rf "$work"' EXIT
+    tool="$work/screenshot-image"
+    xcrun swiftc -O "$(cd "$(dirname "$0")" && pwd)/screenshot-image.swift" -o "$tool" \
+        || fail "could not compile scripts/screenshot-image.swift"
 
     # emit_counted <name> <file> <what>: emit, and add up what the blocks added to the log, from each block's
     # `printed` line. Not in a pipeline, so the totals stay in this shell.
@@ -172,9 +163,9 @@ print_all() {
         if [ "$appearance" = light ]; then source="$dir/keyboard.png"; else source="$dir/keyboard-dark.png"; fi
         name="keyboard-$appearance.png"
         if [ -f "$source" ]; then
-            crop "$source" "$work/$name"
+            shape "$source" "$work/$name" png 1
             emit_counted "$name" "$work/$name" \
-                "the keyboard extension in the app field, $appearance; crop of $crop_note, full resolution, PNG"
+                "the keyboard extension in the app field, $appearance; crop of $note, full resolution, PNG"
         else
             echo "speakboard-screenshot none name=$name reason=no $source"
             missing=$((missing + 1))
@@ -189,14 +180,13 @@ print_all() {
             name="$state-$appearance.jpg"
             source=$(attachment "$dir/ui-$appearance" "$state-$appearance")
             if [ -n "$source" ] && [ -f "$source" ]; then
-                crop "$source" "$work/$state-$appearance.png"
-                half "$work/$state-$appearance.png" "$work/$name"
+                shape "$source" "$work/$name" jpeg 2
                 if [ "$state" = apple-keyboard ]; then
                     what="Apple keyboard before the UI test switched to Speakboard, $appearance"
                 else
                     what="UI test screenshot $state, $appearance"
                 fi
-                emit_counted "$name" "$work/$name" "$what; crop of $crop_note, scaled to $half_note, JPEG"
+                emit_counted "$name" "$work/$name" "$what; crop of $note, half size, JPEG"
             elif [ "$state" = apple-keyboard ]; then
                 echo "speakboard-screenshot none name=$name reason=the UI test did not find Apple's keyboard up in $appearance appearance, so this run has no screenshot of it"
             else
