@@ -10,8 +10,9 @@
 # that the built extension loads no SwiftUI and no networking
 # framework (what these checks cannot see is in scripts/extension-guard.sh),
 # runs the unit tests, takes screenshots of our keyboard in the simulator,
-# types through the keyboard extension there with UI tests (KEY-62), and prints
-# the screenshots into the job log as text (KEY-68).
+# types through the keyboard extension there with UI tests (KEY-62), and
+# prepares the screenshots that the screenshots jobs print into their job logs
+# as text (KEY-68).
 name: macos
 
 on:
@@ -120,11 +121,20 @@ jobs:
           scripts/sim-keyboard.sh "$DERIVED_DATA/Build/Products/Debug-iphonesimulator/Speakboard.app" \
             "$SIM_DEVICE" "$SIM_RUNTIME" "$OUT/screenshots" "$DERIVED_DATA"
 
-      # KEY-68: the screenshots as text in this job log, near its end, because agents can read the job log but
-      # cannot download the artifact (KEY-54). scripts/screenshots-from-log.sh recovers them from a saved log.
-      - name: Print the screenshots into the job log
+      # KEY-68: the cropped and reduced screenshots that the screenshots jobs below print into their job logs.
+      - name: Prepare the screenshots for the screenshots jobs
+        id: prepare
         if: always() && steps.sim.outcome != 'skipped'
-        run: scripts/screenshots-to-log.sh print "$OUT/screenshots"
+        run: scripts/screenshots-to-log.sh prepare "$OUT/screenshots" "$OUT/log-images"
+
+      - name: Upload the prepared screenshots
+        if: always() && steps.prepare.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-for-logs
+          path: .build/ci-out/log-images
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload the screenshots and logs
         if: always()
@@ -134,3 +144,33 @@ jobs:
           path: .build/ci-out
           if-no-files-found: error
           retention-days: 30
+
+  # KEY-68: the screenshots as text in job logs an agent can read whole. Agents cannot download artifacts (KEY-54),
+  # and GitHub's job-log tool returns at most the last 5,000 lines of a job's log, so each group of images is
+  # printed by its own small job, under 4,500 lines in all, and the apple job's own log stays short. A job fetching
+  # its own workflow's artifact inside CI is not the download KEY-54 forbids. Recover the images from one of these
+  # jobs' logs with scripts/screenshots-from-log.sh. When a screenshots job fails, the run fails too; the apple
+  # job keeps its own result, which is what says whether the build, the tests and the typing proof passed.
+  screenshots:
+    name: screenshots (${{ matrix.group }})
+    needs: apple
+    if: always() && (needs.apple.result == 'success' || needs.apple.result == 'failure')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [keyboard-light, keyboard-dark, ui-light, ui-dark]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Fetch the prepared screenshots from the apple job
+        uses: actions/download-artifact@v7
+        with:
+          name: screenshots-for-logs
+          path: log-images
+
+      - name: Print the screenshots into the job log
+        run: scripts/screenshots-to-log.sh print log-images "${{ matrix.group }}"

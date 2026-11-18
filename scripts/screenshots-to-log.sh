@@ -4,32 +4,54 @@
 # scripts/screenshots-from-log.sh and look at them. Agents cannot download a
 # run's artifacts (KEY-54), but they can read its job log.
 #
-#   scripts/screenshots-to-log.sh print <screenshots dir>
+# GitHub's job-log tool returns at most the last 5,000 lines of a job's log,
+# so the images are not printed in the macOS job, whose own lines (the test
+# totals, the speakboard-ui lines) must stay readable. That job prepares them,
+# and small Linux jobs of the same workflow print them, a group each, every
+# group's whole log within the tool's reach:
+#
+#   scripts/screenshots-to-log.sh prepare <screenshots dir> <out dir>
 #       macOS only (scripts/screenshot-image.swift, compiled with xcrun
-#       swiftc, for the images; sips to check their size; plutil). <screenshots dir> is what
-#       scripts/sim-keyboard.sh wrote. Prints, in this order:
+#       swiftc, for the images; sips to check their size; plutil). Makes,
+#       from what scripts/sim-keyboard.sh wrote, in <out dir>:
 #         keyboard-light.png, keyboard-dark.png
 #             keyboard.png and keyboard-dark.png (the keyboard extension in the
 #             app's field, light, then dark after switching appearance with the
 #             keyboard up), cropped to the keyboard region at full resolution,
-#             PNG, so glyph sharpness and label baselines can be judged
+#             PNG (lossless), so glyph sharpness and label baselines can be
+#             judged
 #         <state>-<appearance>.jpg, for each state shift-auto, shift-off,
 #         shift-on and caps-lock, and each appearance light and dark
 #             the UI tests' screenshots, cropped the same way, then scaled to
 #             half size, JPEG
 #         apple-keyboard-<appearance>.jpg
 #             Apple's keyboard, when the UI test found it up before it switched
-#             to Speakboard, as the others. When a run has not got it, one
-#             `speakboard-screenshot none` line says so; that is not a failure.
+#             to Speakboard, as the others. When a run has not got it, a line
+#             in none.txt says so; that is not a failure.
+#         what.tsv, a line per image: its name, a tab, and what it is
+#         none.txt, a `speakboard-screenshot none` line per image not made
 #       The keyboard region is the bottom 2/5 of the screen, full width: on the
 #       iPhone 18 Pro (874 pt high) from 524 pt down, which holds the keyboard
 #       (from 539 pt) and the system's strip below it, for ours and Apple's.
-#       It fails, after printing what it can, if a screenshot other than
-#       Apple's is missing or an image tool fails.
+#       It fails, after making what it can, if a screenshot other than Apple's
+#       is missing or an image tool fails.
+#
+#   scripts/screenshots-to-log.sh print <prepared dir> <group> [<budget>]
+#       Any platform. Prints the group's images from <prepared dir> as blocks,
+#       or the none line of an image not made, then one line with the group's
+#       image count, lines and characters. The groups:
+#         keyboard-light   keyboard-light.png
+#         keyboard-dark    keyboard-dark.png
+#         ui-light         shift-auto, shift-off, shift-on, caps-lock and
+#                          apple-keyboard, -light.jpg
+#         ui-dark          the same, -dark.jpg
+#       It fails, printing no block, if the blocks would take more than
+#       <budget> lines (default 4200: with a job's own lines, about 150, the
+#       whole log stays under 4,500, within the tool's 5,000), or if an image
+#       other than Apple's is missing.
 #
 #   scripts/screenshots-to-log.sh emit <name> <file> <what>
-#       Prints one file as one block. Any platform: the self-test of the
-#       recovery script uses it on Linux.
+#       Prints one file as one block. Any platform.
 #
 # A block, each line as the script prints it (GitHub puts a timestamp before
 # each line of the job log; the recovery script removes it):
@@ -41,7 +63,7 @@
 # + = x - only, so the job-log tool's JSON escapes nothing in a block.
 #
 # Written for the bash 3.2 at /bin/bash and the tools macOS ships (sips,
-# plutil, base64, shasum) with Xcode's swiftc, as well as Linux for `emit`.
+# plutil, base64, shasum) with Xcode's swiftc, and for Linux (print, emit).
 set -euo pipefail
 
 fail() {
@@ -136,38 +158,39 @@ attachment() {
     done
 }
 
-print_all() {
-    local dir="$1" missing=0 appearance state source name what total=0 count=0 line
-    [ "$(uname -s)" = Darwin ] || fail "print needs macOS (sips, plutil); emit works anywhere"
+prepare() {
+    local dir="$1" out="$2" missing=0 appearance state source name
+    [ "$(uname -s)" = Darwin ] || fail "prepare needs macOS (ImageIO, sips, plutil); print and emit work anywhere"
     command -v sips > /dev/null 2>&1 || fail "sips is not available"
     command -v plutil > /dev/null 2>&1 || fail "plutil is not available"
     [ -d "$dir" ] || fail "no screenshots folder $dir"
+    mkdir -p "$out"
+    : > "$out/what.tsv"
+    : > "$out/none.txt"
     work=$(mktemp -d)
     trap 'rm -rf "$work"' EXIT
     tool="$work/screenshot-image"
     xcrun swiftc -O "$(cd "$(dirname "$0")" && pwd)/screenshot-image.swift" -o "$tool" \
         || fail "could not compile scripts/screenshot-image.swift"
 
-    # emit_counted <name> <file> <what>: emit, and add up what the blocks added to the log, from each block's
-    # `printed` line. Not in a pipeline, so the totals stay in this shell.
-    emit_counted() {
-        emit "$1" "$2" "$3" > "$work/block.txt"
-        cat "$work/block.txt"
-        line=$(tail -n 1 "$work/block.txt")
-        total=$((total + ${line##*chars=}))
-        count=$((count + 1))
+    # made <name> <what>: records the image and says so in the job log.
+    made() {
+        printf '%s\t%s\n' "$1" "$2" >> "$out/what.tsv"
+        echo "speakboard-screenshots: made $1 ($(wc -c < "$out/$1" | tr -d ' ') bytes): $2"
+    }
+    # none <name> <reason>
+    none() {
+        echo "speakboard-screenshot none name=$1 reason=$2" | tee -a "$out/none.txt"
     }
 
-    echo "speakboard-screenshots: the screenshots follow as text; recover them with scripts/screenshots-from-log.sh"
     for appearance in light dark; do
         if [ "$appearance" = light ]; then source="$dir/keyboard.png"; else source="$dir/keyboard-dark.png"; fi
         name="keyboard-$appearance.png"
         if [ -f "$source" ]; then
-            shape "$source" "$work/$name" png 1
-            emit_counted "$name" "$work/$name" \
-                "the keyboard extension in the app field, $appearance; crop of $note, full resolution, PNG"
+            shape "$source" "$out/$name" png 1
+            made "$name" "the keyboard extension in the app field, $appearance; crop of $note, full resolution, PNG"
         else
-            echo "speakboard-screenshot none name=$name reason=no $source"
+            none "$name" "no $source"
             missing=$((missing + 1))
         fi
     done
@@ -180,17 +203,16 @@ print_all() {
             name="$state-$appearance.jpg"
             source=$(attachment "$dir/ui-$appearance" "$state-$appearance")
             if [ -n "$source" ] && [ -f "$source" ]; then
-                shape "$source" "$work/$name" jpeg 2
+                shape "$source" "$out/$name" jpeg 2
                 if [ "$state" = apple-keyboard ]; then
-                    what="Apple keyboard before the UI test switched to Speakboard, $appearance"
+                    made "$name" "Apple keyboard before the UI test switched to Speakboard, $appearance; crop of $note, half size, JPEG"
                 else
-                    what="UI test screenshot $state, $appearance"
+                    made "$name" "UI test screenshot $state, $appearance; crop of $note, half size, JPEG"
                 fi
-                emit_counted "$name" "$work/$name" "$what; crop of $note, half size, JPEG"
             elif [ "$state" = apple-keyboard ]; then
-                echo "speakboard-screenshot none name=$name reason=the UI test did not find Apple's keyboard up in $appearance appearance, so this run has no screenshot of it"
+                none "$name" "the UI test did not find Apple's keyboard up in $appearance appearance, so this run has no screenshot of it"
             else
-                echo "speakboard-screenshot none name=$name reason=no attachment $state-$appearance in $dir/ui-$appearance"
+                none "$name" "no attachment $state-$appearance in $dir/ui-$appearance"
                 if [ "$missing" -eq 0 ] && [ -f "$dir/ui-$appearance/manifest.json" ]; then
                     echo "speakboard-screenshots: the start of $dir/ui-$appearance/manifest.json, to see why:"
                     head -n 60 "$dir/ui-$appearance/manifest.json" || true
@@ -199,7 +221,57 @@ print_all() {
             fi
         done
     done
-    echo "speakboard-screenshots: $count images printed, $total characters of log text"
+    [ "$missing" -eq 0 ] || fail "$missing screenshots that should be there are missing (see the none lines above)"
+    echo "speakboard-screenshots: prepared in $out; the screenshots jobs print them"
+}
+
+# print_group <prepared dir> <group> <budget>
+print_group() {
+    local dir="$1" group="$2" budget="$3" names name what line rest missing=0 count=0 lines chars
+    case "$group" in
+        keyboard-light) names="keyboard-light.png" ;;
+        keyboard-dark) names="keyboard-dark.png" ;;
+        ui-light | ui-dark)
+            names=""
+            for name in shift-auto shift-off shift-on caps-lock apple-keyboard; do
+                names="$names $name-${group#ui-}.jpg"
+            done
+            ;;
+        *) fail "no group $group (keyboard-light, keyboard-dark, ui-light, ui-dark)" ;;
+    esac
+    case "$budget" in
+        '' | *[!0-9]*) fail "the budget must be a number of lines, not \"$budget\"" ;;
+    esac
+    [ -f "$dir/what.tsv" ] || fail "no what.tsv in $dir: is it a folder the prepare step made?"
+    blocks=$(mktemp)
+    trap 'rm -f "$blocks"' EXIT
+    for name in $names; do
+        if [ -f "$dir/$name" ]; then
+            what=""
+            while IFS="$(printf '\t')" read -r line rest; do
+                if [ "$line" = "$name" ]; then what=$rest; fi
+            done < "$dir/what.tsv"
+            [ -n "$what" ] || fail "no line for $name in $dir/what.tsv"
+            emit "$name" "$dir/$name" "$what" >> "$blocks"
+            count=$((count + 1))
+        elif line=$(grep -F "speakboard-screenshot none name=$name " "$dir/none.txt" 2> /dev/null); then
+            printf '%s\n' "$line" >> "$blocks"
+            case "$name" in
+                apple-keyboard-*) ;;
+                *) missing=$((missing + 1)) ;;
+            esac
+        else
+            echo "speakboard-screenshot none name=$name reason=not in $dir" >> "$blocks"
+            missing=$((missing + 1))
+        fi
+    done
+    lines=$(wc -l < "$blocks" | tr -d ' ')
+    chars=$(wc -c < "$blocks" | tr -d ' ')
+    if [ "$lines" -gt "$budget" ]; then
+        fail "group $group would print $lines lines ($chars characters), over its budget of $budget: the job's log would not fit in the job-log tool's last 5,000 lines. Nothing printed"
+    fi
+    cat "$blocks"
+    echo "speakboard-screenshots: group $group: $count images, $lines lines, $chars characters (budget $budget lines)"
     [ "$missing" -eq 0 ] || fail "$missing screenshots that should be there are missing (see the none lines above)"
 }
 
@@ -208,12 +280,16 @@ case "${1:-}" in
         [ "$#" -eq 4 ] || fail "usage: $0 emit <name> <file> <what>"
         emit "$2" "$3" "$4"
         ;;
+    prepare)
+        [ "$#" -eq 3 ] || fail "usage: $0 prepare <screenshots dir> <out dir>"
+        prepare "$2" "$3"
+        ;;
     print)
-        [ "$#" -eq 2 ] || fail "usage: $0 print <screenshots dir>"
-        print_all "$2"
+        [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || fail "usage: $0 print <prepared dir> <group> [<budget lines>]"
+        print_group "$2" "$3" "${4:-4200}"
         ;;
     *)
-        echo "usage: $0 print <screenshots dir> | emit <name> <file> <what>" >&2
+        echo "usage: $0 prepare <screenshots dir> <out dir> | print <prepared dir> <group> [<budget>] | emit <name> <file> <what>" >&2
         exit 2
         ;;
 esac

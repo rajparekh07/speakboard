@@ -213,6 +213,55 @@ else
     echo "screenshots-from-log self-test: ok: a folder that is not empty (fail)"
 fi
 
+# The print step of the screenshots jobs: a group from a prepared folder, as the workflow runs it, then recovered.
+prepared="$work/prepared"
+mkdir -p "$prepared"
+for state in shift-auto shift-off shift-on caps-lock; do
+    head -c $((700 + ${#state})) /dev/urandom > "$prepared/$state-light.jpg"
+    printf '%s\t%s\n' "$state-light.jpg" "UI test screenshot $state, light; half size, JPEG" >> "$prepared/what.tsv"
+done
+echo "speakboard-screenshot none name=apple-keyboard-light.jpg reason=the UI test did not find Apple's keyboard up" \
+    > "$prepared/none.txt"
+if "$emit" print "$prepared" ui-light > "$work/group.out" 2>&1; then
+    stamp < "$work/group.out" > "$work/group.log"
+    if output=$("$recover" "$work/group.log" "$work/group-images" 2>&1) \
+        && cmp -s "$prepared/caps-lock-light.jpg" "$work/group-images/caps-lock-light.jpg" \
+        && [ "$(ls -A "$work/group-images" | wc -l | tr -d ' ')" = 4 ] \
+        && grep -qF "speakboard-screenshot none name=apple-keyboard-light.jpg" <<< "$output" \
+        && grep -qF "speakboard-screenshots: group ui-light: 4 images" "$work/group.out"; then
+        echo "screenshots-from-log self-test: ok: a group printed by the screenshots job is recovered whole (pass)"
+    else
+        echo "screenshots-from-log self-test: WRONG: a group printed by the screenshots job was not recovered whole" >&2
+        echo "$output" | sed 's/^/    /' >&2
+        wrong=$((wrong + 1))
+    fi
+else
+    echo "screenshots-from-log self-test: WRONG: printing a group failed" >&2
+    sed 's/^/    /' "$work/group.out" >&2
+    wrong=$((wrong + 1))
+fi
+if "$emit" print "$prepared" ui-light 20 > "$work/over.out" 2>&1; then
+    echo "screenshots-from-log self-test: WRONG: a group over its line budget printed" >&2
+    wrong=$((wrong + 1))
+elif ! grep -qF "over its budget of 20" "$work/over.out" || grep -qF "speakboard-screenshot begin" "$work/over.out"; then
+    echo "screenshots-from-log self-test: WRONG: a group over its line budget did not fail as it should" >&2
+    sed 's/^/    /' "$work/over.out" >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: a group over its line budget fails and prints no block (fail)"
+fi
+rm "$prepared/shift-on-light.jpg"
+if "$emit" print "$prepared" ui-light > "$work/missing.out" 2>&1; then
+    echo "screenshots-from-log self-test: WRONG: a group with a screenshot missing passed" >&2
+    wrong=$((wrong + 1))
+elif ! grep -qF "speakboard-screenshot none name=shift-on-light.jpg reason=not in" "$work/missing.out"; then
+    echo "screenshots-from-log self-test: WRONG: a group with a screenshot missing did not say which" >&2
+    sed 's/^/    /' "$work/missing.out" >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: a group with a screenshot other than Apple's missing fails (fail)"
+fi
+
 # The printer refuses what the block format does not allow.
 if "$emit" emit "../x.png" "$work/one.bin" "x" > /dev/null 2>&1; then
     echo "screenshots-from-log self-test: WRONG: the printer took a name that is a path" >&2
