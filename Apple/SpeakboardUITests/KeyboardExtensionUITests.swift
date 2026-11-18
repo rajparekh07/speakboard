@@ -8,7 +8,8 @@ import XCTest
 // double tap on the space bar), "ok" and a delete give "Hi. O", and after a double tap on Shift, "ab" types "AB".
 // Then, with Shift off, a tap in the gap between two rows and one in the margin beside the "a" row each type their
 // nearest letter (KEY-24).
-// SPEAKBOARD_APPEARANCE (set by the script through TEST_RUNNER_) names the screenshots.
+// SPEAKBOARD_APPEARANCE (set by the script through TEST_RUNNER_) names the screenshots. When Apple's keyboard is up
+// before the switch to Speakboard, as it often is, a screenshot of it is taken too (KEY-68).
 
 /// The view's accessibility identifier: KeyboardView.accessibilityID (KeyboardKit is not linked into this target).
 let keyboardID = "SpeakboardKeyboard"
@@ -82,11 +83,14 @@ struct KeyboardOnScreen {
 /// Makes Speakboard the keyboard on screen. `xcodebuild test` reinstalls the app, and after that the system may show
 /// Apple's keyboard (seen on CI: its keys in the accessibility tree, and its 226 pt frame). This waits for a keyboard
 /// to be up at all, then, while Apple's key elements are on screen and ours is not, taps the system's next-keyboard
-/// button. A custom keyboard's view exposes no key elements; Apple's does.
+/// button. A custom keyboard's view exposes no key elements; Apple's does. The first time Apple's keyboard is found
+/// up, before the tap that switches away from it, `appleKeyboardIsUp` is called once, for a screenshot of it beside
+/// ours (KEY-68): it adds nothing that brings Apple's keyboard up.
 @MainActor
-func bringUpSpeakboard(_ app: XCUIApplication) {
+func bringUpSpeakboard(_ app: XCUIApplication, appleKeyboardIsUp: () -> Void) {
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     let ours = app.descendants(matching: .any)[keyboardID]
+    var appleSeen = false
     for attempt in 0..<6 {
         if ours.waitForExistence(timeout: 5) {
             say("attempt \(attempt): Speakboard is up")
@@ -97,6 +101,10 @@ func bringUpSpeakboard(_ app: XCUIApplication) {
         guard appleKeys > 0 else {
             // No keyboard yet, or one without key elements that is not ours: wait, do not cycle blind.
             continue
+        }
+        if !appleSeen {
+            appleSeen = true
+            appleKeyboardIsUp()
         }
         let candidates = [
             app.buttons["Next keyboard"], springboard.buttons["Next keyboard"],
@@ -161,7 +169,14 @@ final class KeyboardExtensionUITests: XCTestCase {
         let layout = try XCTUnwrap(
             KeyboardLayout(locale: .english, deviceClass: match.deviceClass, orientation: .portrait))
         say("device \(match.deviceClass.rawValue); window \(window)")
-        bringUpSpeakboard(app)
+        var appleScreenshot = false
+        bringUpSpeakboard(app) {
+            appleScreenshot = true
+            screenshot("apple-keyboard")
+        }
+        if !appleScreenshot {
+            say("Apple's keyboard was not up before Speakboard: no screenshot of it in this appearance")
+        }
         let keyboard = try KeyboardOnScreen(app: app, layout: layout)
         screenshot("shift-auto")
 

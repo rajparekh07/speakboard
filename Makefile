@@ -56,16 +56,16 @@ override FORMAT_PATHS := Package.swift Sources Tests scripts Apple
 # The steps of a check, in order, for both paths. On the Docker path every step
 # but guard needs docker-ready first, so make check runs guard, docker-ready,
 # guard-deps, and on.
-override CHECK_STEPS := guard guard-deps guard-imports guard-extension guard-literals metrics-check build test \
-	format-check
+override CHECK_STEPS := guard guard-deps guard-imports guard-extension guard-literals screenshots-selftest \
+	metrics-check build test format-check
 
 .PHONY: check check-native native-tools docker-ready guard guard-deps guard-imports guard-extension guard-literals \
-	metrics-check metrics build \
+	screenshots-selftest metrics-check metrics build \
 	test format-check format clean
 
 # check: everything a ticket must pass. The three core guards, the extension
-# guard, the literal guard, the token pin and the generated token files, build,
-# tests, format check.
+# guard, the literal guard, the screenshot recovery's self-test, the token pin
+# and the generated token files, build, tests, format check.
 check: $(CHECK_STEPS)
 	@echo "make check: OK"
 
@@ -124,6 +124,12 @@ guard-extension: $(DOCKER_READY)
 # first.
 guard-literals: $(DOCKER_READY)
 	@$(RUN) bash -c '$(FRONTEND) scripts/literal-guard-selftest.sh && scripts/literal-guard.sh'
+
+# screenshots-selftest: the self-test of scripts/screenshots-from-log.sh, which
+# recovers the keyboard's screenshots from a saved macOS CI job log (KEY-68).
+# It runs in the Swift image, as the recovery runs there, and natively on macOS.
+screenshots-selftest: $(DOCKER_READY)
+	@$(RUN) scripts/screenshots-from-log-selftest.sh
 
 # metrics-check: the pinned token export matches DesignTokens/tokens.pin, and the
 # committed generated files (the metrics tables and the drawing tokens) are
