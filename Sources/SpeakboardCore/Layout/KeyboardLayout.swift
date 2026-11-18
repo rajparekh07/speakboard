@@ -16,8 +16,12 @@
 // rows (`key.gap.vertical`) and no further, and never past the view. In portrait
 // the side insets are narrower than that gap, so the whole width resolves; in
 // landscape on Face ID classes the key area is inset 60 pt from each side, and
-// only the first row gap's worth of each margin resolves, so a thumb resting on
-// the phone's edge types nothing. The rule is ours (the reach is the
+// only the first row gap's worth of each margin resolves. A finger that lands
+// outside the touch area (a dead margin, or the strip) is on no key, but it is
+// still a finger to touch handling (KeyTouches): its landing finishes the open
+// finger (commits its letter, or ends a Delete hold), and if it slides into the
+// touch area and lifts there, it types the key it lifts on. Only its own key
+// is missing while it is outside: lifted outside, it types nothing. The rule is ours (the reach is the
 // orchestrator's decision in KEY-24 review round 1), plain arithmetic on the
 // frames, not measured from Apple's keyboard: Apple's keyboard also moves its
 // hit targets with what is likely to be typed next, and nothing here does that

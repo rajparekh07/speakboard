@@ -94,6 +94,10 @@ struct HitTestAllocationTests {
         var nearestHits = 0
         var nearestMisses = 0
         var nearestKeys = 0
+        var hiddenHits = 0
+        var hiddenKeys = 0
+        var hiddenExact = 0
+        var hiddenCalls = 0
         var checksum = 0.0
         let rounds = 10
 
@@ -124,6 +128,21 @@ struct HitTestAllocationTests {
                     }
                     if layout.key(nearest: grid[pointIndex]) != nil { nearestKeys &+= 1 }
                     if layout.keyIndex(at: grid[pointIndex], by: .nearest) != nil { nearestKeys &+= 1 }
+                    // The same with the next-keyboard key hidden, as the extension runs (`switchKey=false`): every
+                    // entry point, and the exact hit-test too. On the home-button classes the globe key exists, and
+                    // these calls skip it.
+                    if let index = layout.keyIndex(nearest: grid[pointIndex], showsInputModeSwitchKey: false) {
+                        hiddenHits &+= 1
+                        checksum += Double(index)
+                    }
+                    if layout.key(nearest: grid[pointIndex], showsInputModeSwitchKey: false) != nil { hiddenKeys &+= 1 }
+                    if layout.keyIndex(at: grid[pointIndex], by: .nearest, showsInputModeSwitchKey: false) != nil {
+                        hiddenKeys &+= 1
+                    }
+                    if layout.keyIndex(at: grid[pointIndex], by: .exact, showsInputModeSwitchKey: false) != nil {
+                        hiddenExact &+= 1
+                    }
+                    hiddenCalls &+= 4
                     pointIndex += 1
                 }
                 index += 1
@@ -139,6 +158,10 @@ struct HitTestAllocationTests {
         #expect(nearestHits > hits, "the nearest-key hit-test finds keys in gaps the exact one misses")
         #expect(nearestMisses > 0, "the strip and points off the view")
         #expect(nearestKeys == 2 * nearestHits)
+        #expect(hiddenCalls == 4 * total, "every point was hit-tested with the next-keyboard key hidden, four ways")
+        #expect(hiddenHits == nearestHits, "hiding the globe key gives its points to its neighbours, never to none")
+        #expect(hiddenKeys == 2 * hiddenHits)
+        #expect(hiddenExact > 0 && hiddenExact < hits, "the hidden globe key's own points hit nothing exactly")
         #expect(allocations == 0, "\(total) hit-tests made \(allocations) heap allocations")
     }
 }

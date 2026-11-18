@@ -186,11 +186,14 @@ final class KeyboardExtensionUITests: XCTestCase {
         try keyboard.tap(.delete)
         expectValue(field, "Hi. O", "after two deletes")
 
-        // Hit targets (KEY-24): Shift off, then a tap in the gap between the "g" row and the row below it, 0.45 of
-        // the way down (near the middle of the gap, on the "g" side, so a small mapping error cannot put it on the
-        // key), and one in the margin left of "a". Each types its nearest letter.
+        // Hit targets (KEY-24): Shift off, then a tap in the gap between the "g" row and the row below it, 0.35 of
+        // the way down, and one in the margin left of "a". Each types its nearest letter. With the 12 pt gap of
+        // iphone-402x874 the gap tap is 4.2 pt below "g" and 1.8 pt above the gap's middle. If the screen mapping
+        // were off: more than 4.2 pt upward, the tap lands on "g" itself, and the test still passes but no longer
+        // shows a gap tap (the old exact hit-test would type "g" too); more than 1.8 pt downward, it is nearer "b",
+        // and the field reads "Hi. Oba".
         try keyboard.tap(.shift)
-        let gapFraction = 0.45
+        let gapFraction = 0.35
         let g = try keyboard.frame(.letter("g"))
         let b = try keyboard.frame(.letter("b"))
         try keyboard.tap(

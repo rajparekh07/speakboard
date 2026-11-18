@@ -27,13 +27,81 @@ struct KeyTouchesAllocationTests {
             """))
     func touchesAllocateNothing() throws {
         let layout = try englishLayout(.iphone402x874, .portrait)
-        var random = TypingAllocationTests.Random(state: 24)
+        let (operations, reachedCapacity) = Self.script(for: layout, seed: 24)
+        #expect(reachedCapacity, "the script never had 16 fingers down")
+
+        // One uncounted `endAll()` on a scratch value first. The first `endAll()` in a process allocates (17 to 23
+        // times, measured in a fresh process, debug build, Linux: in `removeAll(keepingCapacity:)`), and a second one
+        // allocates nothing. Nothing else allocates on first use: in a fresh process the first landing, move, lift,
+        // commit by a landing, Delete landing and cancel each counted 0 (KEY-24 review round 1, reproduced by the
+        // builder). `endAll()` is not on the keystroke path: the adapter calls it when the keyboard appears or goes
+        // away and when the layout changes. So the counted replay below is the process's first use of everything else.
+        var warmUp = KeyTouches()
+        _ = warmUp.endAll()
+        var touches = KeyTouches()
+        allocation_counter_start()
+        let (events, changes, held) = Self.replay(operations, on: &touches, in: layout)
+        let allocations = allocation_counter_stop()
+
+        #expect(events > 1000 && changes > 100 && held > 0, "events \(events), changes \(changes), held \(held)")
+        #expect(allocations == 0, "\(operations.count) touch changes made \(allocations) heap allocations")
+    }
+
+    @Test(
+        "With the next-keyboard key hidden, as the extension runs, on a home-button layout: zero heap allocations",
+        .enabled(
+            if: counterAvailable,
+            """
+            Skipped: no heap allocation counter on this platform. Tests/AllocationCounter works on Linux with \
+            glibc only.
+            """))
+    func hiddenKeyTouchesAllocateNothing() throws {
+        // The extension runs with `showsInputModeSwitchKey` false (macOS CI logs `switchKey=false`), so this is the
+        // path real keystrokes take. On the home-button class the globe key exists, so hiding it does real work: a
+        // quarter of the script's points are on or around it.
+        let layout = try englishLayout(.iphone375x667, .portrait)
+        let globe = try #require(layout.keys.first { $0.kind == .globe })
+        let (operations, reachedCapacity) = Self.script(for: layout, seed: 66, around: globe.frame)
+        #expect(reachedCapacity, "the script never had 16 fingers down")
+        let onGlobe = operations.filter {
+            switch $0 {
+            case .down(_, let point), .move(_, let point), .up(_, let point): return globe.frame.contains(point)
+            case .cancel, .endAll: return false
+            }
+        }.count
+        #expect(onGlobe > 100, "\(onGlobe) touch changes on the globe key")
+
+        var warmUp = KeyTouches()
+        _ = warmUp.endAll()
+        var touches = KeyTouches()
+        touches.showsInputModeSwitchKey = false
+        allocation_counter_start()
+        let (events, changes, held) = Self.replay(operations, on: &touches, in: layout)
+        let allocations = allocation_counter_stop()
+
+        #expect(events > 1000 && changes > 100 && held > 0, "events \(events), changes \(changes), held \(held)")
+        #expect(allocations == 0, "\(operations.count) touch changes made \(allocations) heap allocations")
+        let globeIndex = try #require(layout.keys.firstIndex(of: globe))
+        #expect(!touches.holds(globeIndex))
+    }
+
+    /// A script of 5,000 random touch changes over `layout`, reaching 16 fingers down, and whether it did. With
+    /// `around`, a quarter of the points fall in that rectangle grown by its own size on each side.
+    static func script(for layout: KeyboardLayout, seed: UInt64, around focus: LayoutRect? = nil) -> (
+        [Operation], Bool
+    ) {
+        var random = TypingAllocationTests.Random(state: seed)
         var operations: [Operation] = []
         var down: [Int] = []
         var nextID = 1
         var reachedCapacity = false
         func point() -> LayoutPoint {
-            LayoutPoint(
+            if let focus, random.below(4) == 0 {
+                return LayoutPoint(
+                    x: focus.minX - focus.width + 3 * focus.width * Double(random.below(1000)) / 1000,
+                    y: focus.minY - focus.height + 3 * focus.height * Double(random.below(1000)) / 1000)
+            }
+            return LayoutPoint(
                 x: layout.size.width * Double(random.below(1000)) / 1000,
                 y: layout.size.height * Double(random.below(1000)) / 1000)
         }
@@ -60,23 +128,7 @@ struct KeyTouchesAllocationTests {
                 operations.append(.move(nextID + 1000, point()))
             }
         }
-        #expect(reachedCapacity, "the script never had 16 fingers down")
-
-        // One uncounted `endAll()` on a scratch value first. The first `endAll()` in a process allocates (17 to 23
-        // times, measured in a fresh process, debug build, Linux: in `removeAll(keepingCapacity:)`), and a second one
-        // allocates nothing. Nothing else allocates on first use: in a fresh process the first landing, move, lift,
-        // commit by a landing, Delete landing and cancel each counted 0 (KEY-24 review round 1, reproduced by the
-        // builder). `endAll()` is not on the keystroke path: the adapter calls it when the keyboard appears or goes
-        // away and when the layout changes. So the counted replay below is the process's first use of everything else.
-        var warmUp = KeyTouches()
-        _ = warmUp.endAll()
-        var touches = KeyTouches()
-        allocation_counter_start()
-        let (events, changes, held) = Self.replay(operations, on: &touches, in: layout)
-        let allocations = allocation_counter_stop()
-
-        #expect(events > 1000 && changes > 100 && held > 0, "events \(events), changes \(changes), held \(held)")
-        #expect(allocations == 0, "\(operations.count) touch changes made \(allocations) heap allocations")
+        return (operations, reachedCapacity)
     }
 
     /// Sends every operation to `touches`, indexing with `while` (a `for`-`in` loop allocates in a debug build), and
