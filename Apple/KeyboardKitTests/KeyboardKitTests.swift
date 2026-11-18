@@ -96,6 +96,40 @@ final class Rig {
             try tap(character == " " ? .space : letter(character))
         }
     }
+
+    /// A tap at `point`: down, 50 ms, up, 100 ms.
+    func tap(at point: CGPoint) {
+        let touch = newTouch()
+        view.touchDown(touch, at: point, time: clock)
+        clock += 0.05
+        view.touchUp(touch, at: point, time: clock)
+        clock += 0.1
+    }
+
+    func frame(_ kind: KeyKind) throws -> LayoutRect {
+        layout.keys[try index(of: kind)].frame
+    }
+
+    static func cgPoint(_ point: LayoutPoint) -> CGPoint {
+        CGPoint(x: point.x, y: point.y)
+    }
+
+    static func layoutPoint(_ point: CGPoint) -> LayoutPoint {
+        LayoutPoint(x: Double(point.x), y: Double(point.y))
+    }
+
+    /// A point in the gap below "g", a quarter of the way down to the row below: the nearest key is "g".
+    func gapBelowG() throws -> CGPoint {
+        let g = try frame(letter("g"))
+        let below = try frame(letter("b"))
+        return Self.cgPoint(LayoutPoint(x: g.center.x, y: g.maxY + (below.minY - g.maxY) / 4))
+    }
+
+    /// A point in the margin left of "a", at its middle height: the nearest key is "a".
+    func besideA() throws -> CGPoint {
+        let a = try frame(letter("a"))
+        return Self.cgPoint(LayoutPoint(x: a.minX / 2, y: a.center.y))
+    }
 }
 
 /// Types "hi", two spaces, "x" and a delete, and returns the field's text.
@@ -253,6 +287,164 @@ struct KeyboardTypingTests {
         rig.view.touchMove(1, to: try rig.point(rig.letter("w")), time: rig.clock + 0.05)
         rig.view.touchUp(1, at: try rig.point(rig.letter("w")), time: rig.clock + 0.1)
         #expect(rig.field.text == "w")
+    }
+}
+
+@Suite("KeyboardKit: hit targets and several fingers through the keyboard view (KEY-24)")
+@MainActor
+struct KeyboardTouchTests {
+    @Test(
+        "A tap in a gap between rows, and one beside the a row, type the nearest letter; the exact hit-test types none",
+        arguments: [HitTesting.nearest, .exact])
+    func gapTaps(hitTesting: HitTesting) throws {
+        let rig = try Rig(autocapitalization: .none)
+        rig.typing.hitTesting = hitTesting
+        let gap = try rig.gapBelowG()
+        let margin = try rig.besideA()
+        #expect(rig.layout.key(at: Rig.layoutPoint(gap)) == nil, "the point is in a gap")
+        #expect(rig.layout.key(at: Rig.layoutPoint(margin)) == nil, "the point is in the margin")
+        rig.tap(at: gap)
+        rig.tap(at: margin)
+        #expect(rig.field.text == (hitTesting == .nearest ? "ga" : ""), "\(hitTesting)")
+    }
+
+    @Test(
+        "A finger that lands on a key and lifts in a gap types the key; the exact hit-test types none",
+        arguments: [HitTesting.nearest, .exact])
+    func liftInAGap(hitTesting: HitTesting) throws {
+        let rig = try Rig(autocapitalization: .none)
+        rig.typing.hitTesting = hitTesting
+        let g = try rig.frame(rig.letter("g"))
+        let lift = Rig.cgPoint(LayoutPoint(x: g.center.x, y: g.maxY + 1))
+        #expect(rig.layout.key(at: Rig.layoutPoint(lift)) == nil)
+        rig.view.touchDown(1, at: try rig.point(rig.letter("g")), time: rig.clock)
+        rig.view.touchMove(1, to: lift, time: rig.clock + 0.03)
+        rig.view.touchUp(1, at: lift, time: rig.clock + 0.05)
+        #expect(rig.field.text == (hitTesting == .nearest ? "g" : ""), "\(hitTesting)")
+    }
+
+    @Test("Three overlapping fingers type in the order they landed, with lifts in every order")
+    func rollover() throws {
+        let orders = [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
+        for order in orders {
+            let rig = try Rig(autocapitalization: .none)
+            let t = try rig.point(rig.letter("t"))
+            let h = try rig.point(rig.letter("h"))
+            let e = try rig.point(rig.letter("e"))
+            let points = [1: t, 2: h, 3: e]
+            for id in 1...3 {
+                rig.view.touchDown(id, at: points[id] ?? .zero, time: rig.clock)
+                rig.clock += 0.03
+            }
+            #expect(rig.field.text == "th", "each finger's landing commits the one before it")
+            for id in order {
+                rig.view.touchUp(id, at: points[id] ?? .zero, time: rig.clock)
+                rig.clock += 0.03
+            }
+            #expect(rig.field.text == "the", "lifts in the order \(order)")
+        }
+    }
+
+    @Test("Several fingers down hold several keys: each is drawn pressed until its own finger lifts")
+    func heldKeys() throws {
+        let rig = try Rig(autocapitalization: .none, text: "abc")
+        let shift = try rig.index(of: .shift)
+        let delete = try rig.index(of: .delete)
+        let metrics = rig.layout.metrics
+        // Shift and Delete are both function keys: the same fill at rest and the same pressed fill.
+        let style = KeyStyle.of(.shift, returnKey: .standard, appearance: rig.view.appearance, metrics: metrics)
+        let pressed = KeyboardDrawingTests.expectedColor(try #require(style.pressedFill))
+        let rest = KeyboardDrawingTests.expectedColor(style.fill)
+        #expect(KeyStyle.of(.delete, returnKey: .standard, appearance: rig.view.appearance, metrics: metrics) == style)
+        rig.view.touchDown(1, at: try rig.point(.delete), time: rig.clock)
+        rig.view.touchDown(2, at: try rig.point(.shift), time: rig.clock + 0.05)
+        #expect(rig.typing.holds(delete) && rig.typing.holds(shift))
+        #expect(rig.view.faceLayers[delete].backgroundColor == pressed)
+        #expect(rig.view.faceLayers[shift].backgroundColor == pressed)
+        rig.view.touchUp(1, at: try rig.point(.delete), time: rig.clock + 0.1)
+        #expect(rig.view.faceLayers[delete].backgroundColor == rest)
+        #expect(rig.view.faceLayers[shift].backgroundColor == pressed)
+        rig.view.touchUp(2, at: try rig.point(.shift), time: rig.clock + 0.15)
+        #expect(rig.view.faceLayers[shift].backgroundColor == rest)
+    }
+
+    @Test("Shift held as a modifier is a gap in the engine: the first letter is upper case, the next lower case")
+    func shiftHeld() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let shift = try rig.point(.shift)
+        rig.view.touchDown(1, at: shift, time: rig.clock)
+        #expect(rig.typing.shiftState == .manual)
+        rig.view.touchDown(2, at: try rig.point(rig.letter("a")), time: rig.clock + 0.1)
+        rig.view.touchUp(2, at: try rig.point(rig.letter("a")), time: rig.clock + 0.15)
+        rig.view.touchDown(3, at: try rig.point(rig.letter("b")), time: rig.clock + 0.2)
+        rig.view.touchUp(3, at: try rig.point(rig.letter("b")), time: rig.clock + 0.25)
+        rig.view.touchUp(1, at: shift, time: rig.clock + 0.3)
+        // The engine has only a Shift tap, used up by the first letter (KeyTouches.swift records the gap). A Shift
+        // held as a modifier would type "AB" and turn off at the lift.
+        #expect(rig.field.text == "Ab")
+        #expect(rig.typing.shiftState == .off)
+    }
+
+    @Test("Delete held while another finger types: the hold ends when the finger lands, the letter types, no repeat")
+    func deleteHeldWhileTyping() throws {
+        let rig = try Rig(autocapitalization: .none, text: "abcdef")
+        let delete = try rig.point(.delete)
+        let x = try rig.point(rig.letter("x"))
+        let start = rig.clock
+        rig.view.touchDown(1, at: delete, time: start)
+        #expect(rig.field.text == "abcde")
+        let first = try #require(rig.scheduler.requested)
+        rig.typing.tick(at: first)
+        #expect(rig.field.text == "abcd")
+        rig.view.touchDown(2, at: x, time: first + 0.05)
+        #expect(rig.scheduler.requested == nil, "the landing finger ends the hold")
+        rig.typing.tick(at: first + 1)
+        #expect(rig.field.text == "abcd", "a late tick deletes nothing")
+        rig.view.touchUp(2, at: x, time: first + 0.1)
+        #expect(rig.field.text == "abcdx")
+        rig.view.touchUp(1, at: delete, time: first + 0.2)
+        #expect(rig.field.text == "abcdx", "Delete's own lift deletes nothing more")
+        #expect(rig.scheduler.requested == nil)
+    }
+
+    @Test("A hidden next-keyboard key takes no touch: a finger on it holds its neighbour; shown, it holds the key")
+    func hiddenInputModeSwitchKey() throws {
+        let rig = try Rig(deviceClass: .iphone375x667, autocapitalization: .none)
+        let globe = try rig.index(of: .globe)
+        let modeSwitch = try rig.index(of: .modeSwitch)
+        let frame = try rig.frame(.globe)
+        let leftHalf = Rig.cgPoint(LayoutPoint(x: frame.minX + 1, y: frame.center.y))
+        #expect(!rig.view.showsInputModeSwitchKey)
+        #expect(!rig.typing.showsInputModeSwitchKey, "the view tells the adapter")
+        rig.view.touchDown(1, at: leftHalf, time: rig.clock)
+        #expect(!rig.typing.holds(globe) && rig.typing.holds(modeSwitch))
+        rig.view.touchUp(1, at: leftHalf, time: rig.clock + 0.05)
+        rig.view.showsInputModeSwitchKey = true
+        #expect(rig.typing.showsInputModeSwitchKey)
+        rig.view.touchDown(2, at: leftHalf, time: rig.clock + 0.1)
+        #expect(rig.typing.holds(globe) && !rig.typing.holds(modeSwitch))
+        rig.view.touchUp(2, at: leftHalf, time: rig.clock + 0.15)
+        #expect(rig.field.text == "")
+    }
+
+    @Test("A cancel among several fingers: nothing lost, doubled or left repeating")
+    func cancelAmongSeveral() throws {
+        let rig = try Rig(autocapitalization: .none, text: "ab")
+        let t = try rig.point(rig.letter("t"))
+        let h = try rig.point(rig.letter("h"))
+        let delete = try rig.point(.delete)
+        rig.view.touchDown(1, at: t, time: rig.clock)
+        rig.view.touchDown(2, at: h, time: rig.clock + 0.03)
+        rig.view.touchDown(3, at: delete, time: rig.clock + 0.06)
+        #expect(rig.field.text == "abt", "t and h are committed by the landings after them; Delete deletes h")
+        #expect(rig.scheduler.requested != nil)
+        rig.view.touchCancel(3, time: rig.clock + 0.09)
+        #expect(rig.scheduler.requested == nil, "the cancelled Delete stops repeating")
+        rig.view.touchCancel(1, time: rig.clock + 0.09)
+        rig.view.touchUp(2, at: h, time: rig.clock + 0.12)
+        #expect(rig.field.text == "abt", "the finished fingers' cancel and lift type nothing more")
+        try rig.tap(rig.letter("e"))
+        #expect(rig.field.text == "abte")
     }
 }
 
@@ -435,5 +627,183 @@ struct KeyboardDrawingTests {
             KeyboardLayout(locale: .english, deviceClass: .iphone402x874, orientation: .landscape))
         #expect(view.layout?.orientation == .landscape)
         #expect(height == layout.size.height)
+    }
+}
+
+@Suite("KeyboardKit: a typing state change redraws only the layers that change (KEY-65)")
+@MainActor
+struct KeyboardRedrawTests {
+    /// The keys whose layers were written between `before` and `after`, with how many writes of each kind.
+    static func writes(_ before: [KeyLayerWrites], _ after: [KeyLayerWrites]) -> [Int: KeyLayerWrites] {
+        var changed: [Int: KeyLayerWrites] = [:]
+        for index in after.indices {
+            let old = index < before.count ? before[index] : KeyLayerWrites()
+            var delta = KeyLayerWrites()
+            delta.face = after[index].face - old.face
+            delta.fill = after[index].fill - old.fill
+            delta.label = after[index].label - old.label
+            delta.glyph = after[index].glyph - old.glyph
+            if delta != KeyLayerWrites() { changed[index] = delta }
+        }
+        return changed
+    }
+
+    static func only(face: Int = 0, fill: Int = 0, label: Int = 0, glyph: Int = 0) -> KeyLayerWrites {
+        var writes = KeyLayerWrites()
+        writes.face = face
+        writes.fill = fill
+        writes.label = label
+        writes.glyph = glyph
+        return writes
+    }
+
+    @Test("A letter's press and lift write only that key's fill, once each")
+    func letterPress() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let q = try rig.index(of: rig.letter("q"))
+        let start = rig.view.layerWrites
+        rig.view.touchDown(1, at: try rig.point(rig.letter("q")), time: rig.clock)
+        #expect(Self.writes(start, rig.view.layerWrites) == [q: Self.only(fill: 1)])
+        rig.view.touchUp(1, at: try rig.point(rig.letter("q")), time: rig.clock + 0.05)
+        #expect(Self.writes(start, rig.view.layerWrites) == [q: Self.only(fill: 2)])
+        #expect(rig.field.text == "q")
+    }
+
+    @Test("Two fingers: the held keys' fills, and nothing else")
+    func twoFingers() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let t = try rig.index(of: rig.letter("t"))
+        let h = try rig.index(of: rig.letter("h"))
+        let start = rig.view.layerWrites
+        rig.view.touchDown(1, at: try rig.point(rig.letter("t")), time: rig.clock)
+        rig.view.touchDown(2, at: try rig.point(rig.letter("h")), time: rig.clock + 0.03)
+        #expect(Self.writes(start, rig.view.layerWrites) == [t: Self.only(fill: 1), h: Self.only(fill: 1)])
+        rig.view.touchUp(1, at: try rig.point(rig.letter("t")), time: rig.clock + 0.06)
+        rig.view.touchUp(2, at: try rig.point(rig.letter("h")), time: rig.clock + 0.09)
+        #expect(Self.writes(start, rig.view.layerWrites) == [t: Self.only(fill: 2), h: Self.only(fill: 2)])
+        #expect(rig.field.text == "th")
+    }
+
+    @Test("A Shift change writes the letters' text and Shift's glyph; Shift's press and lift write its fill")
+    func shiftChange() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let shift = try rig.index(of: .shift)
+        let letters = rig.layout.keys.indices.filter {
+            if case .letter = rig.layout.keys[$0].kind { return true }
+            return false
+        }
+        #expect(letters.count == 26)
+        var expected: [Int: KeyLayerWrites] = [shift: Self.only(fill: 2, glyph: 1)]
+        for index in letters { expected[index] = Self.only(label: 1) }
+
+        let start = rig.view.layerWrites
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .manual)
+        #expect(Self.writes(start, rig.view.layerWrites) == expected)
+        #expect(rig.view.labelText(at: letters[0]) == "Q")
+        #expect(rig.view.glyphName(at: shift) == "shift.fill")
+
+        // A letter uses Shift up: its own fill twice, and the letters and Shift back to lower case.
+        let a = try rig.index(of: rig.letter("a"))
+        let before = rig.view.layerWrites
+        try rig.tap(rig.letter("a"))
+        #expect(rig.field.text == "A")
+        var back: [Int: KeyLayerWrites] = [shift: Self.only(glyph: 1)]
+        for index in letters { back[index] = Self.only(label: 1) }
+        back[a] = Self.only(fill: 2, label: 1)
+        #expect(Self.writes(before, rig.view.layerWrites) == back)
+        #expect(rig.view.labelText(at: letters[0]) == "q")
+        #expect(rig.view.glyphName(at: shift) == "shift")
+    }
+
+    @Test("Caps lock: manual to locked writes only Shift's glyph (and fill); locked to off the letters' case too")
+    func capsLock() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let shift = try rig.index(of: .shift)
+        let letters = rig.layout.keys.indices.filter {
+            if case .letter = rig.layout.keys[$0].kind { return true }
+            return false
+        }
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .manual)
+        let manual = rig.view.layerWrites
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .locked)
+        #expect(Self.writes(manual, rig.view.layerWrites) == [shift: Self.only(fill: 2, glyph: 1)])
+        #expect(rig.view.glyphName(at: shift) == "capslock.fill")
+
+        rig.clock += 1
+        let locked = rig.view.layerWrites
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .off)
+        var expected: [Int: KeyLayerWrites] = [shift: Self.only(fill: 2, glyph: 1)]
+        for index in letters { expected[index] = Self.only(label: 1) }
+        #expect(Self.writes(locked, rig.view.layerWrites) == expected)
+        #expect(rig.view.glyphName(at: shift) == "shift")
+        #expect(rig.view.labelText(at: letters[0]) == "q")
+    }
+
+    @Test("A tap on automatic Shift: Shift's fill and glyph; then a context change that changes nothing writes nothing")
+    func shiftWithoutVisibleChange() throws {
+        let rig = try Rig(autocapitalization: .sentences)
+        #expect(rig.typing.shiftState == .automatic)
+        let shift = try rig.index(of: .shift)
+        let start = rig.view.layerWrites
+        // A tap turns automatic Shift off: the letters to lower case, and Shift's fill (press and lift) and glyph.
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .off)
+        #expect(Self.writes(start, rig.view.layerWrites)[shift] == Self.only(fill: 2, glyph: 1))
+        // A context change that changes nothing writes nothing.
+        let quiet = rig.view.layerWrites
+        rig.typing.textDidChange(at: rig.clock)
+        #expect(Self.writes(quiet, rig.view.layerWrites).isEmpty)
+    }
+
+    @Test("A return key type change writes only the return key, whole")
+    func returnKeyChange() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let returnIndex = try rig.index(of: .returnKey)
+        let start = rig.view.layerWrites
+        rig.field.fieldReturnKeyType = .go
+        rig.typing.textDidChange(at: rig.clock)
+        #expect(Self.writes(start, rig.view.layerWrites) == [returnIndex: Self.only(face: 1, fill: 1, label: 1)])
+        #expect(rig.view.labelText(at: returnIndex) == "go")
+        let prominent = KeyStyle.of(
+            .returnKey, returnKey: .prominent, appearance: rig.view.appearance, metrics: rig.layout.metrics)
+        #expect(rig.view.faceLayers[returnIndex].backgroundColor == KeyboardDrawingTests.expectedColor(prominent.fill))
+    }
+
+    @Test("An appearance change redraws every key: face, fill, and label or glyph")
+    func appearanceChange() throws {
+        let rig = try Rig(autocapitalization: .none)
+        rig.view.applyUserInterfaceStyle(.light)
+        let start = rig.view.layerWrites
+        rig.view.applyUserInterfaceStyle(.dark)
+        let writes = Self.writes(start, rig.view.layerWrites)
+        #expect(writes.count == rig.layout.keys.count)
+        for index in rig.layout.keys.indices {
+            let key = writes[index] ?? KeyLayerWrites()
+            #expect(key.face == 1 && key.fill == 1 && key.label + key.glyph == 1, "key \(index): \(key)")
+        }
+        KeyboardDrawingTests.check(rig, .dark)
+        let again = rig.view.layerWrites
+        rig.view.applyUserInterfaceStyle(.dark)
+        #expect(Self.writes(again, rig.view.layerWrites).isEmpty, "the same appearance again redraws nothing")
+    }
+
+    @Test("A layout change rebuilds and redraws every key")
+    func layoutChange() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let other = DeviceClass.iphone440x956
+        rig.view.update(screenWidth: other.screenWidth, screenHeight: other.screenHeight)
+        let layout = try #require(rig.view.layout)
+        #expect(layout.deviceClass == other)
+        #expect(rig.view.layerWrites.count == layout.keys.count)
+        for (index, key) in rig.view.layerWrites.enumerated() {
+            #expect(key.face == 1 && key.fill == 1 && key.label + key.glyph == 1, "key \(index): \(key)")
+        }
+        let same = rig.view.layerWrites
+        rig.view.update(screenWidth: other.screenWidth, screenHeight: other.screenHeight)
+        #expect(Self.writes(same, rig.view.layerWrites).isEmpty, "the same layout again redraws nothing")
     }
 }

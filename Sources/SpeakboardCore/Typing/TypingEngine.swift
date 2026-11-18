@@ -38,7 +38,9 @@
 /// - There is no event yet for a key that types nothing (123, globe, the mic). Such a key cannot cancel a pending
 ///   double tap on Shift or a pending double space: a Shift tap, 123, then a quick Shift tap still locks.
 /// - Shift is a tap. Holding Shift while typing letters (uppercase while held, off on release) will need Shift
-///   down and up events; they do not exist yet.
+///   down and up events; they do not exist yet (KEY-66). What the adapter sends today (`KeyTouches`, KEY-24):
+///   `.shift` when a finger lands on Shift, and nothing when it lifts, so Shift held while typing "a" then "b"
+///   gives "Ab".
 /// - Send `.deleteUp` when Delete's touch ends for any reason, `touchesCancelled` included. Until `.deleteUp` or
 ///   another key arrives, the hold goes on deleting at every `.tick`.
 /// - An engine lives for one field session (the orchestrator's decision in KEY-22 review round 2). Make a fresh

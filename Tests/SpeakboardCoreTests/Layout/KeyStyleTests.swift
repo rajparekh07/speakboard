@@ -146,6 +146,9 @@ struct KeyStyleTests {
         var checksum = 0.0
         var count = 0
 
+        // No warm-up. Once, in KEY-24, one local run of the whole suite counted 1 allocation here; the cause is
+        // unknown. This test alone in a fresh process, with no warm-up, counts 0, and 8 runs of the whole suite with
+        // no warm-up passed (KEY-24 review round 1, and the builder again). If it recurs, record the count.
         // `while` loops, not `for`-`in`: see HitTestAllocationTests.
         allocation_counter_start()
         var m = 0
