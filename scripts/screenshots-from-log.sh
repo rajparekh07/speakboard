@@ -20,13 +20,17 @@
 #     at its start, as a tail of the log may be);
 #   - a line in a block that is not base64, a block line shorter than 76
 #     characters before its last line, or a begin line it cannot read;
-#   - a name used twice, or a name that is not a plain file name;
+#   - a name used twice (names that differ only in case count as one), or a
+#     name that is not a plain file name;
+#   - in the job-log tool's JSON, anything after the logs_content string but
+#     the end of that JSON object (two files run together, say);
 #   - an image whose decoded bytes do not have the byte count and SHA-256 its
 #     begin line gives (a line lost or a character changed);
 #   - no blocks at all.
 # It prints each `speakboard-screenshot none` line it finds: those say that a
 # run had no screenshot of something (Apple's keyboard, say), and are not a
-# failure.
+# failure. What it prints from the log has its control characters shown as
+# "?". Each image's SHA-256 is checked again after it is copied to <out dir>.
 #
 # Written for the bash 3.2 at /bin/bash and the tools macOS ships, and for the
 # Linux Swift image (mawk, GNU coreutils).
@@ -60,6 +64,13 @@ sha256() {
     fi
 }
 
+# Text from the log that this prints (the none lines, the what text) with control characters, an escape
+# sequence's ESC among them, shown as "?", so a log cannot drive the terminal it is read in.
+printable() {
+    # 9 + 21 + 1 characters in the first set, 31 question marks: no tr repeat syntax, which busybox lacks.
+    LC_ALL=C tr '\001-\011\013-\037\177' '???????????????????????????????'
+}
+
 decode_base64() {
     # GNU and macOS (13 and later) base64 both take -d.
     base64 -d
@@ -84,15 +95,31 @@ if [ "$first" = "{" ]; then
             }
             return value
         }
-        # Prints text up to an unescaped quote, which ends the string. Returns 1 at the end.
+        # Prints text up to an unescaped quote, which ends the string. Returns 1 at the end, with what follows the
+        # quote in `after`.
         function literal(text,    quote) {
             quote = index(text, "\"")
             if (quote) {
                 printf "%s", substr(text, 1, quote - 1)
+                after = substr(text, quote + 1)
                 return 1
             }
             printf "%s", text
             return 0
+        }
+        # The string ended in piece `last`. What follows it must be only the rest of the tool JSON object (the
+        # message and the line count: no object, and no second logs_content), so two JSON files run together, or
+        # anything else after the first, fail rather than drop what follows.
+        function ended(last,    j, tail) {
+            tail = after
+            for (j = last + 1; j <= n; j++) tail = tail "\\" parts[j]
+            sub(/[ \t\r\n]+$/, "", tail)
+            if (index(tail, "logs_content") || index(tail, "{") || substr(tail, length(tail)) != "}") {
+                print "screenshots-from-log: FAIL: something other than the end of the JSON follows its logs_content string (two files run together?)" > "/dev/stderr"
+                exit 3
+            }
+            printf "\n"
+            exit 0
         }
         END {
             key = "\"logs_content\":\""
@@ -102,11 +129,11 @@ if [ "$first" = "{" ]; then
                 exit 3
             }
             n = split(substr(doc, start + length(key)), parts, /\\/)
-            if (literal(parts[1])) { printf "\n"; exit 0 }
+            if (literal(parts[1])) ended(1)
             plain = 0
             for (i = 2; i <= n; i++) {
                 piece = parts[i]
-                if (plain) { plain = 0; if (literal(piece)) { printf "\n"; exit 0 } continue }
+                if (plain) { plain = 0; if (literal(piece)) ended(i); continue }
                 if (piece == "") { printf "\\"; plain = 1; continue }
                 c = substr(piece, 1, 1)
                 rest = substr(piece, 2)
@@ -126,7 +153,7 @@ if [ "$first" = "{" ]; then
                     print "screenshots-from-log: FAIL: an escape \\" c " the JSON reader does not know" > "/dev/stderr"
                     exit 3
                 }
-                if (literal(rest)) { printf "\n"; exit 0 }
+                if (literal(rest)) ended(i)
             }
             print "screenshots-from-log: FAIL: the logs_content string has no end: the JSON is cut" > "/dev/stderr"
             exit 3
@@ -162,8 +189,9 @@ awk -v work="$work" '
                     stop("a begin line the reader cannot read: " line)
                 }
                 name = substr(field[2], 6)
-                if (name in seen) stop("the name " name " is used twice")
-                seen[name] = 1
+                # Case-insensitively: on the default macOS file system A.png and a.png are one file.
+                if (tolower(name) in seen) stop("the name " name " is used twice (names that differ only in case count as one)")
+                seen[tolower(name)] = 1
                 what = substr(rest, index(rest, " what=") + 6)
                 blocks++
                 file = work "/" blocks ".b64"
@@ -213,7 +241,7 @@ awk -v work="$work" '
             exit 1
         }
     }
-' "$work/log.txt" || status=$?
+' "$work/log.txt" | printable || status=$?
 [ "$status" -eq 0 ] || exit 1
 
 # 3. Each image: decoded, then checked against its byte count and SHA-256.
@@ -232,7 +260,11 @@ mkdir -p "$out"
 count=0
 while IFS="$(printf '\t')" read -r k name bytes sha what; do
     cp "$work/images/$name" "$out/$name"
-    echo "screenshots-from-log: $out/$name: $bytes bytes, SHA-256 $sha, matches. $what"
+    # Checked again where it lands, so nothing in between (another image of the same name on a case-insensitive
+    # file system, say) can put other bytes under this name.
+    got_sha=$(sha256 < "$out/$name")
+    [ "$got_sha" = "$sha" ] || fail "$out/$name: SHA-256 $got_sha after the copy, not $sha"
+    echo "screenshots-from-log: $out/$name: $bytes bytes, SHA-256 $sha, matches. $what" | printable
     count=$((count + 1))
 done < "$work/manifest.tsv"
 echo "screenshots-from-log: OK: $count images, each matching the byte count and SHA-256 printed with it"

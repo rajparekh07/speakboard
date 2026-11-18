@@ -193,6 +193,30 @@ check fail "a name that is a path" "a begin line the reader cannot read" "$work/
 sed 's/sha256=[0-9a-f]*/sha256=abc/' "$work/one.block" | stamp > "$work/short-sha.log"
 check fail "a begin line with a short SHA-256" "a begin line the reader cannot read" "$work/short-sha.log"
 
+sed 's/name=one.png/name=ONE.png/g' "$work/one.block" | cat "$work/one.block" - | stamp > "$work/case.log"
+check fail "two names that differ only in case" "the name ONE.png is used twice" "$work/case.log"
+
+as_json < "$work/clean.log" > "$work/first.json"
+as_json < "$work/two.log" > "$work/second.json"
+cat "$work/first.json" "$work/second.json" > "$work/concatenated.json"
+check fail "two JSON files run together" "follows its logs_content string" "$work/concatenated.json"
+
+esc=$(printf '\033')
+{
+    sed "s/what=a test image/what=a ${esc}[2J test image/" "$work/one.block"
+    echo "speakboard-screenshot none name=x.jpg reason=${esc}[2J gone"
+} | stamp > "$work/escape.log"
+out_escape="$work/out-escape"
+if output=$("$recover" "$work/escape.log" "$out_escape" 2>&1) && ! grep -q "$esc" <<< "$output" \
+    && grep -qF 'reason=?[2J gone' <<< "$output" && grep -qF 'matches. a ?[2J test image' <<< "$output" \
+    && cmp -s "$work/one.bin" "$out_escape/one.png"; then
+    echo "screenshots-from-log self-test: ok: control characters in a none line and a what text are shown as ? (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: control characters in a none line or a what text reached the output" >&2
+    printf '%s\n' "$output" | od -c | head -n 20 | sed 's/^/    /' >&2
+    wrong=$((wrong + 1))
+fi
+
 stamp < "$work/before.txt" > "$work/empty.log"
 check fail "no blocks" "no screenshot blocks in the log" "$work/empty.log"
 

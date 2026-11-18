@@ -33,8 +33,9 @@
 #       The keyboard region is the bottom 2/5 of the screen, full width: on the
 #       iPhone 18 Pro (874 pt high) from 524 pt down, which holds the keyboard
 #       (from 539 pt) and the system's strip below it, for ours and Apple's.
-#       It fails, after making what it can, if a screenshot other than Apple's
-#       is missing or an image tool fails.
+#       If a screenshot other than Apple's is missing, it makes the rest, then
+#       fails. If an image tool fails, it fails at once, with what it made so
+#       far left in <out dir>.
 #
 #   scripts/screenshots-to-log.sh print <prepared dir> <group> [<budget>]
 #       Any platform. Prints the group's images from <prepared dir> as blocks,
@@ -46,9 +47,22 @@
 #                          apple-keyboard, -light.jpg
 #         ui-dark          the same, -dark.jpg
 #       It fails, printing no block, if the blocks would take more than
-#       <budget> lines (default 4200: with a job's own lines, about 150, the
-#       whole log stays under 4,500, within the tool's 5,000), or if an image
-#       other than Apple's is missing.
+#       <budget> lines, or if an image other than Apple's is missing.
+#
+#       The one hard limit is the job-log tool's: it returns at most the last
+#       5,000 lines of a job's log. The budget, 4,600 printed lines a group by
+#       default, is ours. A screenshots job's own lines (checkout, the artifact
+#       fetch, setup and cleanup) were 211 on a475ff9 (4,127 lines in all, 3,916
+#       of them printed), so a group at its budget gives a log of about 4,811
+#       lines: a margin of about 190 lines for those lines to grow.
+#
+#       If the full-resolution crop outgrows one job (a busier backdrop, such
+#       as a translucent one with the app blurred through it, makes a bigger
+#       PNG), split it over two jobs rather than lose pixels: have `prepare`
+#       cut the crop into its top and bottom halves at a row between key rows,
+#       as keyboard-<appearance>-top.png and -bottom.png, each lossless; give
+#       each half its own group and matrix entry (keyboard-light-top and so
+#       on); and say in the docs that the halves are one image. Not built.
 #
 #   scripts/screenshots-to-log.sh emit <name> <file> <what>
 #       Prints one file as one block. Any platform.
@@ -286,7 +300,7 @@ case "${1:-}" in
         ;;
     print)
         [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || fail "usage: $0 print <prepared dir> <group> [<budget lines>]"
-        print_group "$2" "$3" "${4:-4200}"
+        print_group "$2" "$3" "${4:-4600}"
         ;;
     *)
         echo "usage: $0 prepare <screenshots dir> <out dir> | print <prepared dir> <group> [<budget>] | emit <name> <file> <what>" >&2

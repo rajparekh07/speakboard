@@ -43,6 +43,9 @@ jobs:
   apple:
     runs-on: xcode-27
     timeout-minutes: 60
+    outputs:
+      # The prepared screenshots' artifact id, set only when they were uploaded: the screenshots jobs run on it.
+      screenshots-artifact: ${{ steps.upload-log-images.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -128,6 +131,7 @@ jobs:
         run: scripts/screenshots-to-log.sh prepare "$OUT/screenshots" "$OUT/log-images"
 
       - name: Upload the prepared screenshots
+        id: upload-log-images
         if: always() && steps.prepare.outcome != 'skipped'
         uses: actions/upload-artifact@v7
         with:
@@ -147,14 +151,17 @@ jobs:
 
   # KEY-68: the screenshots as text in job logs an agent can read whole. Agents cannot download artifacts (KEY-54),
   # and GitHub's job-log tool returns at most the last 5,000 lines of a job's log, so each group of images is
-  # printed by its own small job, under 4,500 lines in all, and the apple job's own log stays short. A job fetching
+  # printed by its own small job whose whole log fits in those 5,000 lines (each prints at most its budget of 4,600
+  # lines; see scripts/screenshots-to-log.sh), and the apple job's own log stays short. A job fetching
   # its own workflow's artifact inside CI is not the download KEY-54 forbids. Recover the images from one of these
   # jobs' logs with scripts/screenshots-from-log.sh. When a screenshots job fails, the run fails too; the apple
   # job keeps its own result, which is what says whether the build, the tests and the typing proof passed.
   screenshots:
     name: screenshots (${{ matrix.group }})
     needs: apple
-    if: always() && (needs.apple.result == 'success' || needs.apple.result == 'failure')
+    # Only when the apple job uploaded the prepared screenshots, whatever its own result: an apple job that fails
+    # before then (or is cancelled) leaves no artifact, and these jobs would only add failures that say nothing.
+    if: always() && needs.apple.outputs.screenshots-artifact != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
