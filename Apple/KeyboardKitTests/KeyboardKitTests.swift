@@ -806,4 +806,88 @@ struct KeyboardRedrawTests {
         rig.view.update(screenWidth: other.screenWidth, screenHeight: other.screenHeight)
         #expect(Self.writes(same, rig.view.layerWrites).isEmpty, "the same layout again redraws nothing")
     }
+
+    /// Whether each key was written exactly once whole: face, fill, and label or glyph (KEY-67).
+    static func expectEveryKeyOnce(_ writes: [Int: KeyLayerWrites], _ layout: KeyboardLayout, _ what: String) {
+        #expect(writes.count == layout.keys.count, "\(what): \(writes.count) of \(layout.keys.count) keys written")
+        for index in layout.keys.indices {
+            let key = writes[index] ?? KeyLayerWrites()
+            #expect(key.face == 1 && key.fill == 1 && key.label + key.glyph == 1, "\(what): key \(index): \(key)")
+        }
+    }
+
+    @Test("A new field session: the letters' case and Shift's glyph if Shift changed, the fill a dropped finger held")
+    func newFieldSession() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let shift = try rig.index(of: .shift)
+        let q = try rig.index(of: rig.letter("q"))
+        let letters = rig.layout.keys.indices.filter {
+            if case .letter = rig.layout.keys[$0].kind { return true }
+            return false
+        }
+        try rig.tap(.shift)
+        #expect(rig.typing.shiftState == .manual)
+        rig.view.touchDown(rig.newTouch(), at: try rig.point(rig.letter("q")), time: rig.clock)
+        #expect(rig.typing.holds(q))
+
+        // A fresh engine (Shift off: the field does not capitalise) and the finger on "q" forgotten.
+        let start = rig.view.layerWrites
+        rig.typing.beginFieldSession(at: rig.clock + 0.05)
+        #expect(rig.typing.shiftState == .off)
+        #expect(!rig.typing.holds(q))
+        var expected: [Int: KeyLayerWrites] = [shift: Self.only(glyph: 1)]
+        for index in letters { expected[index] = Self.only(label: 1) }
+        expected[q] = Self.only(fill: 1, label: 1)
+        #expect(Self.writes(start, rig.view.layerWrites) == expected)
+        #expect(rig.field.text.isEmpty, "the forgotten finger typed nothing")
+
+        // Another session that changes nothing drawn writes nothing.
+        let same = rig.view.layerWrites
+        rig.typing.beginFieldSession(at: rig.clock + 0.1)
+        #expect(Self.writes(same, rig.view.layerWrites).isEmpty)
+    }
+
+    @Test("The next-keyboard key appearing, then going: every key redrawn once each time; the same value, nothing")
+    func inputModeSwitchKeyChange() throws {
+        let rig = try Rig(deviceClass: .iphone375x667, autocapitalization: .none)
+        let globe = try rig.index(of: .globe)
+        #expect(rig.view.faceLayers[globe].isHidden)
+        for shows in [true, false] {
+            let start = rig.view.layerWrites
+            rig.view.showsInputModeSwitchKey = shows
+            Self.expectEveryKeyOnce(Self.writes(start, rig.view.layerWrites), rig.layout, "shows \(shows)")
+            #expect(rig.view.faceLayers[globe].isHidden == !shows)
+            let same = rig.view.layerWrites
+            rig.view.showsInputModeSwitchKey = shows
+            #expect(Self.writes(same, rig.view.layerWrites).isEmpty, "shows \(shows) again redraws nothing")
+        }
+    }
+
+    @Test("A display-scale change redraws every key once, with the glyphs rendered at the new scale")
+    func displayScaleChange() throws {
+        let rig = try Rig(autocapitalization: .none)
+        let shift = try rig.index(of: .shift)
+        var widths: [CGFloat: Int] = [:]
+        for scale: CGFloat in [2, 3] {
+            let start = rig.view.layerWrites
+            rig.view.traitOverrides.displayScale = scale
+            rig.view.updateTraitsIfNeeded()
+            // A view with no window takes a trait override on `traitOverrides` (macOS CI, KEY-67), though it ignores
+            // `overrideUserInterfaceStyle` (KEY-62).
+            let taken = rig.view.traitCollection.displayScale
+            try #require(taken == scale, "the view reads display scale \(taken), not the override \(scale)")
+            // The registered trait change redraws, or the next layout pass does: either way, once. This call to
+            // `applyUserInterfaceStyle` is the test's own, so the test shows that a new scale redraws every key once,
+            // at that scale; it would still pass if `UITraitDisplayScale` were dropped from `registerForTraitChanges`.
+            rig.view.applyUserInterfaceStyle(.light)
+            Self.expectEveryKeyOnce(Self.writes(start, rig.view.layerWrites), rig.layout, "scale \(scale)")
+            widths[scale] = try #require(rig.view.glyphImage(at: shift)).width
+            let same = rig.view.layerWrites
+            rig.view.applyUserInterfaceStyle(.light)
+            #expect(Self.writes(same, rig.view.layerWrites).isEmpty, "scale \(scale) again redraws nothing")
+        }
+        let two = try #require(widths[2])
+        let three = try #require(widths[3])
+        #expect(abs(Double(three) * 2 - Double(two) * 3) <= 3, "Shift's glyph is \(two) px at 2x, \(three) px at 3x")
+    }
 }

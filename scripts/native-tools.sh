@@ -81,7 +81,7 @@ require_pinned() {
 check() {
     local pinned="$1" tool developer path
     # What the scripts make check-native runs call, besides bash's builtins.
-    for tool in swift grep find sort sed mktemp cut diff head tr cat env uname od wc; do
+    for tool in swift grep find sort sed mktemp cut diff head tr cat env uname od wc awk base64 fold cmp tail; do
         command -v "$tool" > /dev/null 2>&1 || fail "\`$tool\` is not available"
     done
     if ! command -v sha256sum > /dev/null 2>&1 && ! command -v shasum > /dev/null 2>&1; then
