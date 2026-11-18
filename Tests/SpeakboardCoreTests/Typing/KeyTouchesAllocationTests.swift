@@ -27,8 +27,9 @@ struct KeyTouchesAllocationTests {
             """))
     func touchesAllocateNothing() throws {
         let layout = try englishLayout(.iphone402x874, .portrait)
-        let (operations, reachedCapacity) = Self.script(for: layout, seed: 24)
+        let (operations, reachedCapacity, reuses) = Self.script(for: layout, seed: 24)
         #expect(reachedCapacity, "the script never had 16 fingers down")
+        #expect(reuses > 50, "the script reused an identity still down \(reuses) times")
 
         // One uncounted `endAll()` on a scratch value first. The first `endAll()` in a process allocates (17 to 23
         // times, measured in a fresh process, debug build, Linux: in `removeAll(keepingCapacity:)`), and a second one
@@ -45,6 +46,8 @@ struct KeyTouchesAllocationTests {
 
         #expect(events > 1000 && changes > 100 && held > 0, "events \(events), changes \(changes), held \(held)")
         #expect(allocations == 0, "\(operations.count) touch changes made \(allocations) heap allocations")
+        let stale = Self.staleLandings(operations, in: layout, showsInputModeSwitchKey: true)
+        #expect(stale == reuses, "\(stale) landings found their identity still down, of \(reuses) reuses")
     }
 
     @Test(
@@ -61,8 +64,9 @@ struct KeyTouchesAllocationTests {
         // quarter of the script's points are on or around it.
         let layout = try englishLayout(.iphone375x667, .portrait)
         let globe = try #require(layout.keys.first { $0.kind == .globe })
-        let (operations, reachedCapacity) = Self.script(for: layout, seed: 66, around: globe.frame)
+        let (operations, reachedCapacity, reuses) = Self.script(for: layout, seed: 66, around: globe.frame)
         #expect(reachedCapacity, "the script never had 16 fingers down")
+        #expect(reuses > 50, "the script reused an identity still down \(reuses) times")
         let onGlobe = operations.filter {
             switch $0 {
             case .down(_, let point), .move(_, let point), .up(_, let point): return globe.frame.contains(point)
@@ -83,18 +87,25 @@ struct KeyTouchesAllocationTests {
         #expect(allocations == 0, "\(operations.count) touch changes made \(allocations) heap allocations")
         let globeIndex = try #require(layout.keys.firstIndex(of: globe))
         #expect(!touches.holds(globeIndex))
+        let stale = Self.staleLandings(operations, in: layout, showsInputModeSwitchKey: false)
+        #expect(stale == reuses, "\(stale) landings found their identity still down, of \(reuses) reuses")
     }
 
-    /// A script of 5,000 random touch changes over `layout`, reaching 16 fingers down, and whether it did. With
-    /// `around`, a quarter of the points fall in that rectangle grown by its own size on each side.
+    /// A script of 5,000 random touch changes over `layout`, reaching 16 fingers down, whether it did, and how many
+    /// landings reuse an identity that is still down. With `around`, a quarter of the points fall in that rectangle
+    /// grown by its own size on each side.
+    ///
+    /// A reused identity is a lift UIKit never delivered, then the `UITouch` object's address reused for a new finger
+    /// (KEY-67): `KeyTouches.began` drops the stale finger first. About one landing in eight with a finger down is one.
     static func script(for layout: KeyboardLayout, seed: UInt64, around focus: LayoutRect? = nil) -> (
-        [Operation], Bool
+        [Operation], Bool, Int
     ) {
         var random = TypingAllocationTests.Random(state: seed)
         var operations: [Operation] = []
         var down: [Int] = []
         var nextID = 1
         var reachedCapacity = false
+        var reuses = 0
         func point() -> LayoutPoint {
             if let focus, random.below(4) == 0 {
                 return LayoutPoint(
@@ -107,7 +118,11 @@ struct KeyTouchesAllocationTests {
         }
         for _ in 0..<5000 {
             let roll = random.below(10)
-            if roll < 4 && down.count < KeyTouches.capacity {
+            if roll < 4 && !down.isEmpty && random.below(8) == 0 {
+                // The identity stays down: the stale finger is replaced by this one.
+                operations.append(.down(down[random.below(down.count)], point()))
+                reuses += 1
+            } else if roll < 4 && down.count < KeyTouches.capacity {
                 operations.append(.down(nextID, point()))
                 down.append(nextID)
                 nextID += 1
@@ -128,7 +143,29 @@ struct KeyTouchesAllocationTests {
                 operations.append(.move(nextID + 1000, point()))
             }
         }
-        return (operations, reachedCapacity)
+        return (operations, reachedCapacity, reuses)
+    }
+
+    /// Replays `operations` on a fresh value, not counted, and returns how many landings found a finger with the
+    /// same identity still down: the branch of `KeyTouches.began` that drops a stale finger.
+    static func staleLandings(
+        _ operations: [Operation], in layout: KeyboardLayout, showsInputModeSwitchKey: Bool
+    ) -> Int {
+        var touches = KeyTouches()
+        touches.showsInputModeSwitchKey = showsInputModeSwitchKey
+        var stale = 0
+        for operation in operations {
+            switch operation {
+            case .down(let id, let point):
+                if touches.touches.contains(where: { $0.id == id }) { stale += 1 }
+                _ = touches.began(id, at: point, in: layout)
+            case .move(let id, let point): _ = touches.moved(id, to: point, in: layout)
+            case .up(let id, let point): _ = touches.ended(id, at: point, in: layout)
+            case .cancel(let id): _ = touches.cancelled(id)
+            case .endAll: _ = touches.endAll()
+            }
+        }
+        return stale
     }
 
     /// Sends every operation to `touches`, indexing with `while` (a `for`-`in` loop allocates in a debug build), and

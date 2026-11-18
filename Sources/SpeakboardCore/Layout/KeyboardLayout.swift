@@ -21,13 +21,13 @@
 // still a finger to touch handling (KeyTouches): its landing finishes the open
 // finger (commits its letter, or ends a Delete hold), and if it slides into the
 // touch area and lifts there, it types the key it lifts on. Only its own key
-// is missing while it is outside: lifted outside, it types nothing. The rule is ours (the reach is the
-// orchestrator's decision in KEY-24 review round 1), plain arithmetic on the
-// frames, not measured from Apple's keyboard: Apple's keyboard also moves its
-// hit targets with what is likely to be typed next, and nothing here does that
-// or claims to match Apple's targets. Assumptions, for a device test (rung 4):
-// that the nearest key by this rule is what a finger in a gap means, and that
-// the reach beyond the outermost keys is right.
+// is missing while it is outside: lifted outside, it types nothing. The rule
+// is ours (the reach is the orchestrator's decision in KEY-24 review round 1),
+// plain arithmetic on the frames, not measured from Apple's keyboard: Apple's
+// keyboard also moves its hit targets with what is likely to be typed next, and
+// nothing here does that or claims to match Apple's targets. Assumptions, for
+// a device test (rung 4): that the nearest key by this rule is what a finger in
+// a gap means, and that the reach beyond the outermost keys is right.
 //
 // The bottom row is Apple's default row, as the token export assumes it when it
 // derives key.space.width: 123, emoji, space, return on iPhones with a home
