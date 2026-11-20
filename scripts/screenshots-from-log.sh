@@ -41,7 +41,9 @@
 # check has passed does that folder become <out dir>.
 #
 # Written for the bash 3.2 at /bin/bash and the tools macOS ships, and for the
-# Linux Swift image (mawk, GNU coreutils).
+# Linux Swift image (mawk, GNU coreutils). Its awk runs in the C locale, so it
+# reads the log as bytes: macOS's awk, in a UTF-8 locale, stops on a byte that
+# is not UTF-8 ("towc: multibyte conversion failure", KEY-69).
 set -euo pipefail
 
 # Text from the log that this prints (the none lines, the what text, and the log lines its failure messages quote)
@@ -98,7 +100,7 @@ trap 'rm -rf "$work"' EXIT
 # one logs_content string, and nothing after the object's end.
 first=$(head -c 1 "$log")
 if [ "$first" = "{" ]; then
-    awk '
+    LC_ALL=C awk '
         { doc = doc (NR > 1 ? "\n" : "") $0 }
         function hexvalue(hex,    i, value) {
             value = 0
@@ -217,7 +219,7 @@ fi
 # 2. The blocks. Each block's base64 goes to <k>.b64, and a line per block to
 # manifest.tsv: k, name, bytes, sha256, what.
 status=0
-awk -v work="$work" '
+LC_ALL=C awk -v work="$work" '
     function stop(message) {
         print "screenshots-from-log: FAIL: line " NR ": " message > "/dev/stderr"
         failed = 1
