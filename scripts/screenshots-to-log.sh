@@ -213,6 +213,7 @@ prepare() {
     mkdir -p "$out"
     : > "$out/what.tsv"
     : > "$out/none.txt"
+    : > "$out/checks-failed.txt"
     # The printing jobs' groups, one per line (KEY-9): only groups whose images were all made, so a run that
     # fails part way gives its one real failure and the images that exist, not a red job per missing image. Empty
     # until the end, so a prepare that stops on a tool failure names none.
@@ -294,7 +295,12 @@ prepare() {
     [ -s "$out/manifest.txt" ] && ours="$ours manifest"
     printf '%s\n' $ours $groups > "$out/groups.txt"
     echo "speakboard-screenshots: the screenshots jobs' groups, those whose images were all made:" $ours $groups
+    if [ -s "$out/checks-failed.txt" ]; then
+        cat "$out/checks-failed.txt"
+    fi
     [ "$missing" -eq 0 ] || fail "$missing screenshots that should be there are missing (see the none lines above)"
+    [ ! -s "$out/checks-failed.txt" ] \
+        || fail "$(wc -l < "$out/checks-failed.txt" | tr -d ' ') checks of the captures failed (the FAIL check lines above); their images are printed, to be looked at"
     echo "speakboard-screenshots: prepared in $out; the screenshots jobs print them"
 }
 
@@ -359,6 +365,21 @@ commit_sha() {
     printf '%s' "${GITHUB_SHA:-none}" | tr -cd '0-9a-z'
 }
 
+# soft_check <out dir> <capture names> <message> <command...>: runs a check (review round 2, finding 4). When it does
+# not exit 0, it prints a line, and records one per capture it concerns in <out dir>/checks-failed.txt, and returns 0:
+# prepare goes on, writes the groups of every image made (the failing capture's included, so it can be seen; its
+# printing job prints that line), and fails at its end, naming each failed check.
+soft_check() {
+    local dir="$1" names="$2" message="$3" code=0 name
+    shift 3
+    "$@" || code=$?
+    [ "$code" = 0 ] && return 0
+    echo "speakboard-screenshots: FAIL: a check failed (exit $code): $message"
+    for name in $names; do
+        printf '%s\n' "speakboard-screenshots: FAIL check: $name: $message (exit $code)" >> "$dir/checks-failed.txt"
+    done
+}
+
 # expect_check <0|3> <failure message> <image tool check arguments...>: runs a check of scripts/screenshot-image.swift
 # (it exits 0 when the check holds, 3 when it does not, 1 on an error) and fails unless it exits <0|3>.
 expect_check() {
@@ -373,11 +394,12 @@ expect_check() {
 # each in $out/manifest.txt. Uses prepare's dir, out, tool, missing and groups.
 apple_captures() {
     local appearance state name source log facts window width height scale
-    local points_wide points_high bytes sha top count pieces fits band parts part first rows what checks bottom crop
+    local points_wide points_high bytes sha top count pieces fits band parts part first rows what checks bottom crop names
     : > "$out/manifest.txt"
     for appearance in light dark; do
         log="$dir/apple-$appearance.log"
         checks=""
+        names=""
         for state in letters-upper letters-lower caps-lock numbers symbols; do
             name="apple-$state-$appearance"
             source=$(attachment "$dir/apple-$appearance" "$name")
@@ -402,9 +424,10 @@ apple_captures() {
             # The panel's top edge is inside the crop: its first rows are one colour, the background above the
             # panel (review round 1, finding 2).
             cp "$out/$name.png" "$work/check-$name.png"
-            expect_check 0 "$name: the top 10 rows of its crop are not one colour, so the top edge of the panel may be outside the crop" \
-                uniform "$work/check-$name.png" 0 10
+            soft_check "$out" "$name" "the top 10 rows of its crop are not one colour, so the top edge of the panel may be outside the crop" \
+                "$tool" uniform "$work/check-$name.png" 0 10
             checks="$checks $work/check-$name.png"
+            names="$names $name"
             bottom=$(printf '%s\n' "$(facts_value "$facts" keyboard)" \
                 | awk -F, -v scale="$scale" -v top="$((height - height * 2 / 5))" '{ printf "%d", ($2 + $4) * scale - top }')
             crop=$((height * 2 / 5))
@@ -463,9 +486,10 @@ apple_captures() {
             expect_check 3 "the one-colour check passed a whole crop, keys and all: it cannot fail" uniform "$1" 0 "$crop"
             expect_check 3 "the sameness check passed letters upper case against numbers: it cannot fail" \
                 same 0 "$crop" "$1" "$4"
-            expect_check 0 "$appearance: the background above the panel differs between the captures" same 0 10 "$@"
-            expect_check 0 "$appearance: the strip below the keys (crop rows $bottom on) differs between the captures" \
-                same "$bottom" "$((crop - bottom))" "$@"
+            soft_check "$out" "$names" "$appearance: the background above the panel differs between the captures" \
+                "$tool" same 0 10 "$@"
+            soft_check "$out" "$names" "$appearance: the strip below the keys (crop rows $bottom on) differs between the captures" \
+                "$tool" same "$bottom" "$((crop - bottom))" "$@"
         fi
     done
     echo "speakboard-screenshots: the manifest of the captures of Apple's keyboard ($(wc -l < "$out/manifest.txt" | tr -d ' ') images):"
@@ -474,7 +498,7 @@ apple_captures() {
 
 # print_group <prepared dir> <group> <budget>
 print_group() {
-    local dir="$1" group="$2" budget="$3" names name what line rest missing=0 count=0 lines chars
+    local dir="$1" group="$2" budget="$3" names name what line rest missing=0 count=0 lines chars capture
     case "$group" in
         keyboard-light) names="keyboard-light.png" ;;
         keyboard-dark) names="keyboard-dark.png" ;;
@@ -500,6 +524,11 @@ print_group() {
                 *[!a-z0-9-]*) fail "no group $group" ;;
             esac
             names="$group.png"
+            # A check of this capture that failed in prepare (review round 2, finding 4): said here, above the image.
+            capture=$(printf '%s\n' "$group" | sed 's/-[0-9]*-of-[0-9]*$//')
+            if [ -f "$dir/checks-failed.txt" ]; then
+                grep -F "speakboard-screenshots: FAIL check: $capture: " "$dir/checks-failed.txt" || true
+            fi
             ;;
         *) fail "no group $group (keyboard-light, keyboard-dark, ui-light, ui-dark, manifest, apple-...)" ;;
     esac
@@ -564,6 +593,12 @@ case "${1:-}" in
     print)
         [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || fail "usage: $0 print <prepared dir> <group> [<budget lines>]"
         print_group "$2" "$3" "${4:-$default_budget}"
+        ;;
+    check-recording)
+        # For the self-test: soft_check with a stand-in command for the image tool.
+        [ "$#" -ge 5 ] || fail "usage: $0 check-recording <out dir> <capture names> <message> <command...>"
+        shift
+        soft_check "$@"
         ;;
     describe)
         [ "$#" -eq 6 ] || fail "usage: $0 describe <facts line> <crop note> <capture name> <part file> <scale>"

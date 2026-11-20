@@ -459,6 +459,24 @@ else
     echo "screenshots-from-log self-test: WRONG: the groups as JSON: $json" >&2
     wrong=$((wrong + 1))
 fi
+# KEY-9 review round 2, finding 4: a failed check of a capture is recorded, not fatal at once, and the capture's group
+# still prints its image, with the failed check above it. The image tool is stood in for by commands that exit 3 (the
+# check does not hold) and 0 (it holds); prepare itself runs only on macOS, so its last line (it fails, naming the
+# checks) is shown only on CI.
+if "$emit" check-recording "$apple" "apple-numbers-dark" "a stand-in check that does not hold" sh -c 'exit 3' \
+    > "$work/soft.out" 2>&1 \
+    && "$emit" check-recording "$apple" "apple-numbers-dark" "a stand-in check that holds" true >> "$work/soft.out" 2>&1 \
+    && [ "$(wc -l < "$apple/checks-failed.txt" | tr -d ' ')" = 1 ] \
+    && grep -qF "FAIL check: apple-numbers-dark: a stand-in check that does not hold (exit 3)" "$apple/checks-failed.txt" \
+    && "$emit" print "$apple" apple-numbers-dark > "$work/soft-print.out" 2>&1 \
+    && grep -qF "FAIL check: apple-numbers-dark: a stand-in check that does not hold" "$work/soft-print.out" \
+    && grep -qF "speakboard-screenshot begin name=apple-numbers-dark.png" "$work/soft-print.out"; then
+    echo "screenshots-from-log self-test: ok: a failed check is recorded, and its capture still prints, the failure above it (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: a failed check was not recorded and printed as it should be" >&2
+    cat "$work/soft.out" "$apple/checks-failed.txt" "$work/soft-print.out" 2> /dev/null | sed 's/^/    /' >&2
+    wrong=$((wrong + 1))
+fi
 echo 'apple-x"y' >> "$apple/groups.txt"
 if "$emit" groups "$apple" > /dev/null 2>&1; then
     echo "screenshots-from-log self-test: WRONG: a group name with a quote went into the matrix's JSON" >&2
