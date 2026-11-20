@@ -128,7 +128,11 @@ if [ "$first" = "{" ]; then
                     continue
                 }
                 if (c == "\"") instring = 1
-                else if (c == "{" || c == "[") stack = stack c
+                else if (c == "{" || c == "[") {
+                    # An object opened inside the array of the top object: an entry in the logs of a failed-only answer.
+                    if (c == "{" && stack == "{[") entries++
+                    stack = stack c
+                }
                 else if (c == "}" || c == "]") {
                     want = (c == "}") ? "{" : "["
                     if (substr(stack, length(stack)) != want) stop("a " c " that closes nothing open in the JSON: not the job-log tool JSON")
@@ -163,6 +167,7 @@ if [ "$first" = "{" ]; then
                 rest = substr(tail, closedat + 1)
                 sub(/^[ \t\r\n]+/, "", rest)
                 if (rest != "") stop("something follows the end of the JSON object that holds the logs_content string (two files run together?)")
+                if (shape == "jobs" && entries > 1) stop("the job-log tool JSON holds " entries " entries in its logs, one with no logs_content (a failed-only fetch by run id, with several failed jobs): fetch one job by its job_id, with return_content true")
                 printf "\n"
                 exit 0
             }

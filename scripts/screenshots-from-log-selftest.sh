@@ -232,6 +232,16 @@ check fail "a failed-only fetch by run id with two jobs" "fetch one job by its j
 as_failed_only "$work/stamped-one.log" > "$work/failed-first.json"
 cat "$work/failed-first.json" "$work/failed-one.json" > "$work/failed-concatenated.json"
 check fail "two failed-only answers run together" "(two files run together?)" "$work/failed-concatenated.json"
+# A failed-only answer with one job's log and a second entry that has none (the tool could not fetch it): refused as
+# more than one job, whether that entry comes after the log's or before it (review round 1, finding 9).
+sed 's/"original_length":9}],/"original_length":9},{"job_id":2,"job_name":"apple","message":"could not fetch"}],/' \
+    "$work/failed-one.json" > "$work/failed-extra-after.json"
+check fail "a failed-only answer with a second entry after the log, with no logs_content" "fetch one job by its job_id" \
+    "$work/failed-extra-after.json"
+sed 's/"logs":\[{/"logs":[{"job_id":2,"job_name":"apple","message":"could not fetch"},{/' \
+    "$work/failed-one.json" > "$work/failed-extra-before.json"
+check fail "a failed-only answer with a second entry before the log, with no logs_content" \
+    "fetch one job by its job_id" "$work/failed-extra-before.json"
 # Braces, brackets and the key's own name in the tool's message are text in a string, not structure.
 sed 's/"message":"Job logs content retrieved successfully"/"message":"a {[ \\"logs_content\\":\\" ]} b"/' \
     "$work/two.json" > "$work/message.json"
@@ -298,6 +308,11 @@ check_escaped "a block line that sets the terminal's title, quoted in the failur
 sed "s/^speakboard-screenshot end name=one.png/& ${csi_utf8}31m/" "$work/one.block" | stamp > "$work/escape-end.log"
 check_escaped "an end line with an 8-bit escape in UTF-8, quoted in the failure message" \
     "ends with another name: speakboard-screenshot end name=one.png ??31m" "$work/escape-end.log"
+# The JSON reader's own failure message quotes an unknown escape, here a backslash then ESC ] 0 ; x BEL (review round 1,
+# finding 6).
+printf '{"job_id":1,"logs_content":"abc\\%s]0;x%s"}\n' "$esc" "$bel" > "$work/escape-json.json"
+check_escaped "an escape the JSON reader does not know, ESC and BEL, quoted in its failure message" \
+    "an escape \\? the JSON reader does not know" "$work/escape-json.json"
 
 stamp < "$work/before.txt" > "$work/empty.log"
 check fail "no blocks" "no screenshot blocks in the log" "$work/empty.log"
@@ -471,7 +486,8 @@ for state in letters-upper letters-lower caps-lock numbers symbols band; do
         line=${facts//STATE/numbers}
     fi
     head -c 1500 /dev/urandom > "$described/$part"
-    if ! what=$("$emit" describe "$line" "$note" "apple-${state/band/numbers}-dark" "$part" 3 2>&1) \
+    if ! what=$(GITHUB_RUN_ID=44807428543 GITHUB_SHA=06bdc67d3a4cde0c3edaf4c88801f8083ebbbcd7 \
+        "$emit" describe "$line" "$note" "apple-${state/band/numbers}-dark" "$part" 3 2>&1) \
         || ! "$emit" emit "$part" "$described/$part" "$what" >> "$work/described.log" 2> "$work/described.err"; then
         echo "screenshots-from-log self-test: WRONG: the description of $part cannot be printed: $what" >&2
         sed 's/^/    /' "$work/described.err" >&2
@@ -481,13 +497,28 @@ done
 if [ "$described_ok" = 1 ] && output=$("$recover" "$work/described.log" "$work/described-images" 2>&1) \
     && cmp -s "$described/apple-numbers-dark-2-of-3.png" "$work/described-images/apple-numbers-dark-2-of-3.png" \
     && grep -qF "matches. Apple keyboard reference capture from a simulator, iPhone 18 Pro (iPhone19,2), iOS 27.2, dark appearance, letters, caps lock; crop of rows 1574 to 2621" <<< "$output" \
-    && grep -qF "behind the keyboard: only the plain system background of the app; full resolution, lossless PNG; band 2-of-3 of apple-numbers-dark" <<< "$output" \
+    && grep -qF "behind the keyboard: only the plain system background of the app; full resolution, lossless PNG; CI run 44807428543, commit 06bdc67d3a4cde0c3edaf4c88801f8083ebbbcd7; band 2-of-3 of apple-numbers-dark" <<< "$output" \
     && [ "$(ls -A "$work/described-images" | wc -l | tr -d ' ')" = 6 ]; then
     echo "screenshots-from-log self-test: ok: the descriptions of the captures of Apple's keyboard print and recover (pass)"
 else
     echo "screenshots-from-log self-test: WRONG: the descriptions of the captures of Apple's keyboard did not print and recover" >&2
     echo "$output" | sed 's/^/    /' >&2
     wrong=$((wrong + 1))
+fi
+
+# describe refuses a description the block would refuse, here an apostrophe in the image tool's crop note, so prepare
+# fails on the Mac and not every printing job afterwards (review round 1, finding 7).
+line=${facts//STATE/numbers}
+if output=$("$emit" describe "$line" "rows 1574 to 2621 of 1206x2622, colour space Apple's P3" apple-numbers-dark \
+    apple-numbers-dark.png 3 2>&1); then
+    echo "screenshots-from-log self-test: WRONG: describe made a description the block refuses: $output" >&2
+    wrong=$((wrong + 1))
+elif ! grep -qF "the description of apple-numbers-dark.png has a character the block does not allow" <<< "$output"; then
+    echo "screenshots-from-log self-test: WRONG: describe refused a description, but not as it should" >&2
+    echo "$output" | sed 's/^/    /' >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: describe refuses a description the block would refuse (fail)"
 fi
 
 # The printer refuses what the block format does not allow.
