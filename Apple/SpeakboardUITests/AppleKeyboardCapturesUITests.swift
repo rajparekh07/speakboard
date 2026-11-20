@@ -247,6 +247,50 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             try introduction(app).isEmpty, "the slide-to-type card is still up after three tries to dismiss it")
     }
 
+    /// The letters' case as the keys show it, "upper" or "lower" (from the Q key's label), or "unknown" when neither
+    /// is found within `timeout` seconds. A query of two keys, much quicker than a snapshot of the tree.
+    @MainActor
+    func letterCase(_ app: XCUIApplication, timeout: TimeInterval) -> String {
+        let upper = app.keys.matching(NSPredicate(format: "label == %@", "Q")).firstMatch
+        let lower = app.keys.matching(NSPredicate(format: "label == %@", "q")).firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if upper.exists {
+                return "upper"
+            }
+            if lower.exists {
+                return "lower"
+            }
+        } while Date() < deadline
+        return "unknown"
+    }
+
+    /// Taps Shift once at a time until two taps in a row each change the letters' case within `quick` seconds (the
+    /// keyboard answers quickly), or `bound` seconds pass, then leaves Shift off. Logs each tap's time.
+    @MainActor
+    func waitForQuickShift(_ app: XCUIApplication, quick: TimeInterval = 1.5, bound: TimeInterval = 30) {
+        let start = Date()
+        var quickInARow = 0
+        while quickInARow < 2 && Date().timeIntervalSince(start) < bound {
+            guard let shift = try? find(try items(app), "the shift key", { $0.isNamed(["shift"]) }) else { return }
+            let before = letterCase(app, timeout: 2)
+            let want = before == "upper" ? "lower" : "upper"
+            let tapped = Date()
+            tap(app, shift)
+            let now = letterCase(app, timeout: 3)
+            let seconds = Date().timeIntervalSince(tapped)
+            quickInARow = now == want && seconds <= quick ? quickInARow + 1 : 0
+            let took = String(format: "%.2f", seconds)
+            say("a single tap on shift: \(before) to \(now) in \(took)s (\(quickInARow) quick in a row)")
+        }
+        if letterCase(app, timeout: 2) == "upper",
+            let shift = try? find(try items(app), "the shift key", { $0.isNamed(["shift"]) })
+        {
+            tap(app, shift)
+            say("Shift off again before the double tap: the letters \(letterCase(app, timeout: 3))")
+        }
+    }
+
     @MainActor
     func testCapturesAppleKeyboard() throws {
         try XCTSkipUnless(
@@ -297,10 +341,33 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         // 3. Caps lock: a double tap on Shift from Shift off. "cd" typing "CD" proves it (with Shift alone the second
         // letter is lower case), and after deleting them it is still caps lock, which "e" typing "E" shows; deleted.
         // A synthesised double tap can land as two single taps on a loaded runner (run 44799266681, light: "cd"
-        // typed "cd"), so it is tried up to three times, the letters deleted back to "Ab" between tries.
+        // typed "cd"), so it is tried again, the letters deleted back to "Ab" between tries (below).
+        // A double tap on Shift missed in 6 of 10 tries seen (round 2), always with Shift off right after it: one tap
+        // lost, or two taken as single taps (on, then off) on a keyboard slow to answer, as the first pass on a fresh
+        // simulator is. So before each try the keyboard must answer two single taps on Shift quickly; the tries
+        // alternate two public gestures; each logs its times and Shift's state straight after it. At most 6 tries, with
+        // a growing pause, and 300 seconds in all, so the step stays inside its 40 minutes.
         var capsLock = false
-        for attempt in 1...3 {
-            tap(app, try find(try items(app), "the shift key") { $0.isNamed(["shift"]) }, double: true)
+        let capsDeadline = Date().addingTimeInterval(300)
+        for attempt in 1...6 where !capsLock && Date() < capsDeadline {
+            waitForQuickShift(app)
+            let shiftKey = try find(try items(app), "the shift key") { $0.isNamed(["shift"]) }
+            let shiftElement = app.keyboards.buttons["shift"].firstMatch
+            let element = attempt % 2 == 0 && shiftElement.exists
+            let gesture = element ? "tap(withNumberOfTaps: 2) on the shift button" : "doubleTap() on its coordinate"
+            let before = Date().timeIntervalSince(testStart)
+            if element {
+                shiftElement.tap(withNumberOfTaps: 2, numberOfTouches: 1)
+            } else {
+                tap(app, shiftKey, double: true)
+            }
+            let after = Date().timeIntervalSince(testStart)
+            let value = shiftElement.exists ? (shiftElement.value.map { String(describing: $0) } ?? "") : "no element"
+            let letters = letterCase(app, timeout: 1)
+            let times = "from +\(String(format: "%.2f", before))s to +\(String(format: "%.2f", after))s"
+            say(
+                "double tap \(attempt) on shift (\(gesture)) \(times); right after it Shift's value is \"\(value)\","
+                    + " the letters \(letters)")
             sleep(1)
             log(try items(app), "after double tap \(attempt) on shift")
             for character in "cd" {
@@ -311,14 +378,17 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             }
             sleep(1)
             let typed = (field.value as? String) ?? ""
-            say("double tap \(attempt) on shift, then cd: the field reads \(typed)")
+            say("double tap \(attempt) on shift (\(gesture)), then cd: the field reads \(typed)")
             if typed == "AbCD" {
                 capsLock = true
-                break
+                say("caps lock from double tap \(attempt), \(gesture)")
+            } else {
+                try delete(app, field, max(typed.count - 2, 0), expecting: ["Ab"])
+                sleep(UInt32(attempt))
             }
-            try delete(app, field, max(typed.count - 2, 0), expecting: ["Ab"])
         }
-        XCTAssertTrue(capsLock, "three double taps on Shift did not give caps lock (see the speakboard-ui lines)")
+        XCTAssertTrue(
+            capsLock, "no double tap on Shift gave caps lock in 6 tries or 300 seconds (see the speakboard-ui lines)")
         try delete(app, field, 2, expecting: ["Ab"])
         try typeAndCheck(app, field, "e", expecting: "AbE")
         try delete(app, field, 1, expecting: ["Ab"])
