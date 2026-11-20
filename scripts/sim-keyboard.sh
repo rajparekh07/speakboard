@@ -129,6 +129,14 @@ if [ -n "$derived" ]; then
     hardware_keyboard_off "$capture_udid"
     xcrun simctl boot "$capture_udid"
     xcrun simctl bootstatus "$capture_udid" -b > /dev/null
+    # iOS shows a slide-to-type card over the keyboard the first time one comes up; on run 44793753513 it covered
+    # the light capture. This preference is meant to say it was shown (its name is not documented, and is not known
+    # to be right on iOS 27): the test also dismisses the card if it is up, and proves the keyboard takes taps.
+    xcrun simctl spawn "$capture_udid" defaults write com.apple.keyboard.preferences \
+        DidShowContinuousPathIntroduction -bool true || echo "sim-keyboard: could not write the introduction setting"
+    echo "sim-keyboard: DidShowContinuousPathIntroduction reads" \
+        "$(xcrun simctl spawn "$capture_udid" defaults read com.apple.keyboard.preferences \
+            DidShowContinuousPathIntroduction 2>&1 | tr '\n' ' ')"
     echo "sim-keyboard: its keyboards:" \
         "$(xcrun simctl spawn "$capture_udid" defaults read .GlobalPreferences AppleKeyboards 2>&1 | tr -s ' \n' ' ')"
     for appearance in light dark; do

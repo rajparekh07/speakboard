@@ -300,7 +300,7 @@ block_lines() {
 # each in $out/manifest.txt. Uses prepare's dir, out, tool, missing and groups.
 apple_captures() {
     local appearance state name source log facts ios model window keyboard device phrase width height scale
-    local points_wide points_high bytes sha top count pieces fits band parts part first rows what
+    local points_wide points_high bytes sha top count pieces fits band parts part first rows what contents behind
     : > "$out/manifest.txt"
     for appearance in light dark; do
         log="$dir/apple-$appearance.log"
@@ -321,6 +321,11 @@ apple_captures() {
             model=$(fact model)
             window=$(fact window)
             keyboard=$(fact keyboard)
+            contents=$(fact field)
+            case "$(fact behind)" in
+                plain-system-background) behind="the app's plain system background" ;;
+                *) behind="the app's screen" ;;
+            esac
             device=$(printf '%s' "${facts##* device=}" | tr -cd 'A-Za-z0-9 ,.:;()/+=-')
             case "$state" in
                 letters-upper) phrase="letters, upper case (automatic Shift in the empty field)" ;;
@@ -378,7 +383,8 @@ apple_captures() {
                 note=$(cat "$work/$part.note")
                 what="Apple keyboard reference capture from a simulator, $device ($model), iOS $ios, $appearance"
                 what="$what appearance, $phrase; crop of $note; scale $scale (screen $window pt);"
-                what="$what keyboard frame $keyboard pt (x,y,width,height); full resolution, lossless PNG"
+                what="$what keyboard frame $keyboard pt (x,y,width,height); the field holds: $contents;"
+                what="$what behind the keyboard: $behind; full resolution, lossless PNG"
                 case "$part" in
                     *-of-*.png)
                         band=${part%.png}
@@ -391,7 +397,7 @@ apple_captures() {
                 sha=$(sha256 < "$out/$part")
                 first=${part%.png}
                 groups="$groups $first"
-                printf '%s\n' "speakboard-capture name=$part state=$state appearance=$appearance ios=$ios model=$model pixels=$(pixels "$out/$part" pixelWidth)x$(pixels "$out/$part" pixelHeight) rows=$rows screen=${width}x$height scale=$scale keyboard=$keyboard bytes=$bytes sha256=$sha group=$first simulator device=$device" \
+                printf '%s\n' "speakboard-capture name=$part state=$state appearance=$appearance ios=$ios model=$model pixels=$(pixels "$out/$part" pixelWidth)x$(pixels "$out/$part" pixelHeight) rows=$rows screen=${width}x$height scale=$scale keyboard=$keyboard field=$contents behind=$(fact behind) bytes=$bytes sha256=$sha group=$first simulator device=$device" \
                     >> "$out/manifest.txt"
             done
         done

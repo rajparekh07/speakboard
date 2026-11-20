@@ -10,6 +10,8 @@ struct SpeakboardApp: App {
         WindowGroup {
             if HarnessView.isRequested {
                 HarnessView()
+            } else if PlainFieldView.isRequested {
+                PlainFieldView()
             } else {
                 SetupView()
             }
@@ -48,6 +50,30 @@ struct SetupView: View {
                 focused = true
             }
         }
+    }
+}
+
+/// Only the field, at the top of a plain screen, focused: for the reference captures of Apple's keyboard (KEY-9), so
+/// nothing but the system background shows through the keyboard's translucent panel. Launch the app with
+/// `-SpeakboardPlainField`. The field is the same as SetupView's, with the same identifier and placeholder.
+struct PlainFieldView: View {
+    static var isRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains("-SpeakboardPlainField")
+    }
+
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack {
+            TextField("Type here", text: $text)
+                .focused($focused)
+                .accessibilityIdentifier("TryField")
+                .padding()
+            Spacer()
+        }
+        .background(Color(uiColor: .systemBackground))
+        .onAppear { focused = true }
     }
 }
 

@@ -6,14 +6,17 @@ import XCTest
 // Apple's, once in light and once in dark appearance; SPEAKBOARD_APPLE_CAPTURES=1 (set by the script through
 // TEST_RUNNER_) turns it on, and without it the test skips, so a run of the whole scheme does not depend on it.
 //
-// It launches the app with its field focused, the default keyboard type, and drives Apple's keyboard through five
-// states: letters upper case (automatic Shift in the empty field), letters lower case (a tap on Shift), caps lock (a
-// double tap on Shift), the numbers plane ("123") and the symbols plane ("#+="). It finds Apple's keys in the
-// accessibility tree by their labels and identifiers, logs the tree the first time and after each change, checks the
-// plane after each tap before it takes the screenshot, and checks the case by typing a letter and reading the field
-// after it (then deletes it). Each screenshot is attached as a lossless PNG, apple-<state>-<appearance>, and a
-// `speakboard-apple-capture` line gives the facts its marker needs. It fails, with the tree in the log, if a key or a
-// plane is not found, or if no on-screen keyboard is up (with a hardware keyboard connected, iOS shows none).
+// It launches the app with only its field, at the top of a plain screen (-SpeakboardPlainField), the default keyboard
+// type, and drives Apple's keyboard through five states, proving each state before it captures it: letters upper
+// case (automatic Shift in the empty field: "a" types "A", then deleted), letters lower case (after "A", "b" types
+// "Ab": Shift is off mid-word), caps lock (a double tap on Shift; "cd" types "CD", and after deleting them the
+// keyboard is still in caps lock), the numbers plane ("123": its digit keys and no letter keys) and the symbols
+// plane (no digit or letter keys, and keys other than the numbers'). Before all that, it dismisses iOS's first-run slide-to-type card if it is up (it covered the keyboard on run 44793753513), and
+// proves the keyboard takes taps. It finds Apple's keys in the accessibility tree by their labels and identifiers and
+// logs the tree, on one line, at each step. Each screenshot is attached as a lossless PNG, apple-<state>-<appearance>,
+// and a `speakboard-apple-capture` line gives the facts its marker needs. It fails, with the tree in the log, if a
+// key, a plane or a state is not what it should be, if the card is still up, or if no on-screen keyboard is up (with
+// a hardware keyboard connected, iOS shows none).
 
 /// One element of the keyboard's accessibility tree, as a snapshot gives it.
 struct KeyboardItem {
@@ -133,12 +136,10 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             result, .completed, "\(what): the field reads \(String(describing: field.value)), not one of \(expected)")
     }
 
-    /// Types `text` on Apple's letter keys (found by label, either case), checks the field reads `expected`, and
-    /// deletes it again, so the field is empty.
+    /// Types `text` on Apple's letter or digit keys (found by label, either case) and checks the field reads
+    /// `expected`.
     @MainActor
-    func typeAndDelete(_ app: XCUIApplication, _ field: XCUIElement, _ text: String, expecting expected: String)
-        throws
-    {
+    func typeAndCheck(_ app: XCUIApplication, _ field: XCUIElement, _ text: String, expecting expected: String) throws {
         for character in text {
             let letter = String(character)
             let key = try find(try items(app), "the key \(letter)") {
@@ -147,18 +148,23 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             tap(app, key)
         }
         expectValue(field, [expected], "after typing \(text) on Apple's keyboard")
-        for _ in text {
-            let delete = try find(try items(app), "the delete key") { $0.isNamed(["delete"]) }
-            tap(app, delete)
+    }
+
+    /// Taps Apple's delete key `count` times and checks the field reads one of `expected`.
+    @MainActor
+    func delete(_ app: XCUIApplication, _ field: XCUIElement, _ count: Int, expecting expected: [String]) throws {
+        for _ in 0..<count {
+            tap(app, try find(try items(app), "the delete key") { $0.isNamed(["delete"]) })
         }
-        expectValue(field, emptyValues, "after deleting it")
+        expectValue(field, expected, "after \(count) deletes")
     }
 
     /// Checks that Apple's on-screen keyboard is up and wholly inside the crop the screenshots jobs make (the bottom
     /// 2/5 of the screen), then attaches a lossless screenshot and prints its facts.
     @MainActor
-    func capture(_ app: XCUIApplication, _ state: AppleKeyboardState, window: CGRect) throws {
+    func capture(_ app: XCUIApplication, _ state: AppleKeyboardState, window: CGRect, field: String) throws {
         sleep(1)
+        XCTAssertTrue(try introduction(app).isEmpty, "\(state.rawValue): the slide-to-type card is up")
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.exists, "\(state.rawValue): no on-screen keyboard (is a hardware keyboard connected?)")
         let frame = keyboard.frame
@@ -183,8 +189,60 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             "speakboard-apple-capture name=\(name).png state=\(state.rawValue) appearance=\(appearance)"
                 + " ios=\(UIDevice.current.systemVersion) model=\(model)"
                 + " window=\(Int(window.width))x\(Int(window.height))"
-                + " keyboard=\(frame.minX),\(frame.minY),\(frame.width),\(frame.height) device=\(device)")
+                + " keyboard=\(frame.minX),\(frame.minY),\(frame.width),\(frame.height) field=\(field)"
+                + " behind=plain-system-background device=\(device)")
         say("screenshot \(name) taken; keyboard frame \(frame)")
+    }
+
+    /// The texts of the app's tree that belong to iOS's first-run slide-to-type card, if it is up.
+    @MainActor
+    func introduction(_ app: XCUIApplication) throws -> [String] {
+        var texts: [String] = []
+        func walk(_ snapshot: any XCUIElementSnapshot) {
+            let label = snapshot.label.lowercased()
+            if label.contains("sliding your finger") || label.contains("slide to type") {
+                texts.append(snapshot.label)
+            }
+            for child in snapshot.children {
+                walk(child)
+            }
+        }
+        walk(try app.snapshot())
+        return texts
+    }
+
+    /// Dismisses the slide-to-type card if it is up: a button that continues, or else a tap on its text. Fails if it
+    /// is still up after three tries.
+    @MainActor
+    func dismissIntroduction(_ app: XCUIApplication) throws {
+        for attempt in 0..<3 {
+            let texts = try introduction(app)
+            if texts.isEmpty {
+                say("no slide-to-type card in the tree (attempt \(attempt))")
+                return
+            }
+            say("the slide-to-type card is up (attempt \(attempt)): \(texts)")
+            let buttons = app.buttons.allElementsBoundByIndex.map { "\($0.identifier)/\($0.label)" }
+            say("buttons in the tree: \(buttons.joined(separator: " | "))")
+            let names = ["continue", "ok", "done", "got it", "not now", "close"]
+            let button = app.buttons.allElementsBoundByIndex.first {
+                names.contains($0.label.lowercased()) || names.contains($0.identifier.lowercased())
+            }
+            if let button {
+                say("tapping the card's button \(button.label)")
+                button.tap()
+            } else {
+                let text = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] 'sliding your finger'"))
+                    .firstMatch
+                say("no button on the card: tapping its text")
+                if text.exists {
+                    text.tap()
+                }
+            }
+            sleep(2)
+        }
+        XCTAssertTrue(
+            try introduction(app).isEmpty, "the slide-to-type card is still up after three tries to dismiss it")
     }
 
     @MainActor
@@ -195,12 +253,12 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         testStart = Date()
         say("apple captures began, \(appearance)")
         let app = XCUIApplication()
-        app.launchArguments = ["-SpeakboardFocusField"]
+        app.launchArguments = ["-SpeakboardPlainField"]
         app.launch()
         let field = app.textFields["TryField"]
         XCTAssertTrue(field.waitForExistence(timeout: 20), "the app's field")
         let window = app.windows.firstMatch.frame
-        say("window \(window)")
+        say("window \(window); field \(field.frame)")
 
         // Apple's keyboard up, with its keys: with a hardware keyboard connected there would be no on-screen keyboard.
         var tree = try items(app)
@@ -218,29 +276,39 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             hasKey(tree, ["q"]),
             "no on-screen keyboard with letter keys came up (is a hardware keyboard connected?)")
         expectValue(field, emptyValues, "before the captures")
+        try dismissIntroduction(app)
 
-        // 1. Letters, upper case: automatic Shift in the empty field, which capitalises sentences.
-        try capture(app, .lettersUpper, window: window)
-        try typeAndDelete(app, field, "a", expecting: "A")
+        // 1. Letters, upper case: automatic Shift in the empty field, which capitalises sentences. Proved by "a"
+        // typing "A", which also proves the keyboard takes taps (the slide-to-type card does not); deleted again, the
+        // field is empty and automatic Shift is back.
+        try typeAndCheck(app, field, "a", expecting: "A")
+        try delete(app, field, 1, expecting: emptyValues)
+        log(try items(app), "letters, upper case")
+        try capture(app, .lettersUpper, window: window, field: "empty")
 
-        // 2. Letters, lower case: Shift off.
-        let shift = try find(try items(app), "the shift key") { $0.isNamed(["shift"]) }
-        tap(app, shift)
-        sleep(1)
-        log(try items(app), "after a tap on shift")
-        try capture(app, .lettersLower, window: window)
-        try typeAndDelete(app, field, "a", expecting: "a")
+        // 2. Letters, lower case: after "A", Shift is off mid-word; "b" typing "Ab" proves it.
+        try typeAndCheck(app, field, "a", expecting: "A")
+        try typeAndCheck(app, field, "b", expecting: "Ab")
+        log(try items(app), "letters, lower case")
+        try capture(app, .lettersLower, window: window, field: "Ab")
 
-        // 3. Caps lock: a double tap on Shift, checked by "ab" typing "AB".
+        // 3. Caps lock: a double tap on Shift from Shift off. "cd" typing "CD" proves it (with Shift alone the second
+        // letter is lower case), and after deleting them it is still caps lock, which "e" typing "E" shows; deleted.
         tap(app, try find(try items(app), "the shift key") { $0.isNamed(["shift"]) }, double: true)
         sleep(1)
-        log(try items(app), "after a double tap on shift")
-        try capture(app, .capsLock, window: window)
-        try typeAndDelete(app, field, "ab", expecting: "AB")
+        try typeAndCheck(app, field, "cd", expecting: "AbCD")
+        try delete(app, field, 2, expecting: ["Ab"])
+        try typeAndCheck(app, field, "e", expecting: "AbE")
+        try delete(app, field, 1, expecting: ["Ab"])
+        log(try items(app), "caps lock")
+        try capture(app, .capsLock, window: window, field: "Ab")
+
+        // Caps lock off, and the field emptied, for the numbers and symbols planes.
         tap(app, try find(try items(app), "the shift key") { $0.isNamed(["shift"]) })
         sleep(1)
+        try delete(app, field, 2, expecting: emptyValues)
 
-        // 4. The numbers plane: "123", checked by its digit keys and no letter keys.
+        // 4. The numbers plane: "123", proved by its digit keys and no letter keys.
         let numbersKey = try find(try items(app), "the 123 key") {
             $0.isNamed(["123", "numbers", "more, numbers"]) || $0.identifier == "more"
         }
@@ -250,9 +318,9 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         log(numbers, "after a tap on 123")
         XCTAssertTrue(hasKey(numbers, ["1"]) && hasKey(numbers, ["0"]), "123 did not bring up the numbers plane")
         XCTAssertFalse(hasKey(numbers, ["q"]), "the letter q is still on the keyboard after 123")
-        try capture(app, .numbers, window: window)
+        try capture(app, .numbers, window: window, field: "empty")
 
-        // 5. The symbols plane: "#+=", checked by no digit and no letter keys, and keys other than the numbers'.
+        // 5. The symbols plane: "#+=", proved by no digit and no letter keys, and keys other than the numbers'.
         let symbolsKey = try find(numbers, "the #+= key") {
             $0.isNamed(["#+=", "symbols", "more, symbols"])
         }
@@ -264,7 +332,7 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         XCTAssertFalse(hasKey(symbols, ["q"]), "the letter q is on the keyboard after #+=")
         XCTAssertNotEqual(labels(symbols), labels(numbers), "#+= did not change the keys")
         XCTAssertGreaterThanOrEqual(labels(symbols).count, 10, "the symbols plane has too few keys")
-        try capture(app, .symbols, window: window)
+        try capture(app, .symbols, window: window, field: "empty")
         say("apple captures done, \(appearance)")
     }
 }
