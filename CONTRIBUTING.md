@@ -161,11 +161,11 @@ The artifacts cannot be downloaded (KEY-54), so the screenshots travel as text i
 Each image is a block between `speakboard-screenshot begin` and `end` lines, with its name, byte count, SHA-256 and what it is. To look at them:
 
 1. List the branch's runs of the `macos` workflow, match the head SHA, and list that run's jobs. Pick the `screenshots (...)` job with the images you want.
-2. Call the job-log tool with that job's `job_id`, `return_content` true and `tail_lines` 5000. Its answer is too long to show, so the tool saves it to a file and its message names the file. That file is the tool's JSON; the recovery script reads it as it is, or a plain log. The file may be in a folder (under `/root/.claude`) that your session needs a permission to read or copy; if you cannot read it, stop and ask whoever runs you to copy it into your scratch folder.
+2. Call the job-log tool with that job's `job_id`, `return_content` true and `tail_lines` 5000. Its answer is too long to show, so the tool saves it to a file and its message names the file. That file is the tool's JSON; the recovery script reads it as it is, or a plain log. A failed-only fetch by run id works too when it holds one job; when it holds several, the script refuses it and says to fetch one job by its `job_id`. The file may be in a folder (under `/root/.claude`) that your session needs a permission to read or copy; if you cannot read it, stop and ask whoever runs you to copy it into your scratch folder.
 3. `scripts/screenshots-from-log.sh <that file> <a new folder>`. It writes each image whose byte count and SHA-256 match what was printed, and fails, writing nothing, on a cut or altered block. Each job's log works on its own.
 4. Open the images with the Read tool.
 
-When a screenshots job fails, the workflow run fails too, but the `apple` job keeps its own result: it is the one that says whether the build, the unit tests and the typing proof passed. The screenshots jobs run only when the `apple` job uploaded the prepared images (even if it failed after that), so an `apple` job that fails earlier is the run's only failure.
+When a screenshots job fails, the workflow run fails too, but the `apple` job keeps its own result: it is the one that says whether the build, the unit tests and the typing proof passed. The screenshots jobs run only when the `apple` job uploaded the prepared images, which it does when at least one image was made, whether it then passed, failed or timed out, and not in a cancelled run. So an `apple` job that fails before any image is made is the run's only failure, and if the upload ever gives no artifact id, the `apple` job fails rather than the screenshots being skipped silently.
 
 ## Where code goes
 

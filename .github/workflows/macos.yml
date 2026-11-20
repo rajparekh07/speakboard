@@ -130,9 +130,22 @@ jobs:
         if: always() && steps.sim.outcome != 'skipped'
         run: scripts/screenshots-to-log.sh prepare "$OUT/screenshots" "$OUT/log-images"
 
+      # KEY-69: only when at least one image was made. A simulator step that fails early leaves a folder with only
+      # what.tsv and none.txt, and printing that would only add red jobs with no image.
+      - name: Count the prepared screenshots
+        id: log-images
+        if: always() && steps.prepare.outcome != 'skipped'
+        run: |
+          count=0
+          if [ -d "$OUT/log-images" ]; then
+            count=$(find "$OUT/log-images" -maxdepth 1 -type f \( -name '*.png' -o -name '*.jpg' \) | wc -l | tr -d ' ')
+          fi
+          echo "speakboard-screenshots: $count prepared images"
+          if [ "$count" -gt 0 ]; then echo "any=true" >> "$GITHUB_OUTPUT"; else echo "any=false" >> "$GITHUB_OUTPUT"; fi
+
       - name: Upload the prepared screenshots
         id: upload-log-images
-        if: always() && steps.prepare.outcome != 'skipped'
+        if: always() && steps.log-images.outputs.any == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: screenshots-for-logs
@@ -149,6 +162,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # KEY-69: the screenshots jobs run on the upload's artifact-id. If it ever came back empty after an upload that
+      # succeeded (a renamed step id, a change in the action), they would all be skipped and a green run would carry
+      # no screenshots without anyone seeing it; this makes that red.
+      - name: The prepared screenshots' artifact has an id
+        if: always() && steps.upload-log-images.outcome == 'success' && steps.upload-log-images.outputs.artifact-id == ''
+        run: |
+          echo "the upload of the prepared screenshots succeeded but gave no artifact-id: the screenshots jobs would be skipped" >&2
+          exit 1
+
   # KEY-68: the screenshots as text in job logs an agent can read whole. Agents cannot download artifacts (KEY-54),
   # and GitHub's job-log tool returns at most the last 5,000 lines of a job's log, so each group of images is
   # printed by its own small job whose whole log fits in those 5,000 lines (each prints at most its budget of 4,600
@@ -159,9 +181,12 @@ jobs:
   screenshots:
     name: screenshots (${{ matrix.group }})
     needs: apple
-    # Only when the apple job uploaded the prepared screenshots, whatever its own result: an apple job that fails
-    # before then (or is cancelled) leaves no artifact, and these jobs would only add failures that say nothing.
-    if: always() && needs.apple.outputs.screenshots-artifact != ''
+    # Only when the apple job uploaded the prepared screenshots (at least one image), whether it then passed, failed
+    # or timed out: an apple job that fails before then leaves no artifact, and these jobs would only add failures
+    # that say nothing. Not in a cancelled run (KEY-69): its prepare and upload steps still run, as always() steps
+    # do on a cancel, but nobody is waiting for the images. In this job's condition, cancelled() is true only when the
+    # run was cancelled, not when the apple job failed or timed out.
+    if: ${{ !cancelled() && needs.apple.outputs.screenshots-artifact != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
