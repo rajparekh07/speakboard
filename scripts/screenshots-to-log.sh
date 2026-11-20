@@ -36,14 +36,16 @@
 #             cropped the same way at full resolution, lossless PNG. Each one's
 #             what text says the simulator, device, iOS version, appearance,
 #             state, crop rows, scale and keyboard frame. One that would take
-#             more lines than a printing job's budget is cut into its top and
-#             bottom halves instead, apple-<state>-<appearance>-top.png and
-#             -bottom.png, each lossless, each printed by its own job.
+#             more lines than a printing job's budget is cut instead into the
+#             fewest bands of rows that each fit one job,
+#             apple-<state>-<appearance>-<k>-of-<n>.png, top to bottom, each
+#             lossless, each printed by its own job.
 #         manifest.txt, a `speakboard-capture` line per capture of Apple's
 #             keyboard: name, state, appearance, iOS version, model, pixel
 #             size, crop rows, screen size, scale, keyboard frame, bytes,
 #             SHA-256, the group that prints it, and the simulator's device
-#         groups.txt, the printing jobs' groups, a line each (see print)
+#         groups.txt, the printing jobs' groups, a line each (see print):
+#             only those whose images were all made
 #         what.tsv, a line per image: its name, a tab, and what it is
 #         none.txt, a `speakboard-screenshot none` line per image not made
 #       The keyboard region is the bottom 2/5 of the screen, full width: on the
@@ -63,8 +65,9 @@
 #                          apple-keyboard, -light.jpg
 #         ui-dark          the same, -dark.jpg
 #         manifest         manifest.txt, as plain lines (KEY-9)
-#         apple-<state>-<appearance>[-top|-bottom]
-#                          that capture of Apple's keyboard, or half (KEY-9)
+#         apple-<state>-<appearance>[-<k>-of-<n>]
+#                          that capture of Apple's keyboard, or a band of it
+#                          (KEY-9)
 #       It fails, printing no block, if the blocks would take more than
 #       <budget> lines, or if an image other than the UI test's
 #       apple-keyboard-<appearance>.jpg is missing.
@@ -82,9 +85,9 @@
 #
 #       If a full-resolution crop outgrows one job (a busier backdrop, such
 #       as a translucent one with the app blurred through it, makes a bigger
-#       PNG), it is split over two jobs rather than losing pixels: `prepare`
-#       does so for the captures of Apple's keyboard (KEY-9), cutting the crop
-#       at its middle row, and the workflow's matrix takes its groups from
+#       PNG), it is split over jobs rather than losing pixels: `prepare` does
+#       so for the captures of Apple's keyboard (KEY-9), cutting the crop into
+#       bands of rows, and the workflow's matrix takes its groups from
 #       groups.txt. Our keyboard's keyboard-<appearance>.png is not split: it
 #       fails its group's budget instead.
 #
@@ -200,7 +203,7 @@ attachment() {
 }
 
 prepare() {
-    local dir="$1" out="$2" missing=0 appearance state source name
+    local dir="$1" out="$2" missing=0 appearance state source name ours
     [ "$(uname -s)" = Darwin ] || fail "prepare needs macOS (ImageIO, sips, plutil); print and emit work anywhere"
     command -v sips > /dev/null 2>&1 || fail "sips is not available"
     command -v plutil > /dev/null 2>&1 || fail "plutil is not available"
@@ -208,17 +211,12 @@ prepare() {
     mkdir -p "$out"
     : > "$out/what.tsv"
     : > "$out/none.txt"
-    # The printing jobs' groups, one per line (KEY-9): written now with every capture whole, so a prepare that
-    # fails part way still names a job for each, and again at the end with any capture split in two.
+    # The printing jobs' groups, one per line (KEY-9): only groups whose images were all made, so a run that
+    # fails part way gives its one real failure and the images that exist, not a red job per missing image. Empty
+    # until the end, so a prepare that stops on a tool failure names none.
     budget=$default_budget
-    groups="keyboard-light keyboard-dark ui-light ui-dark manifest"
-    for appearance in light dark; do
-        for state in letters-upper letters-lower caps-lock numbers symbols; do
-            groups="$groups apple-$state-$appearance"
-        done
-    done
-    printf '%s\n' $groups > "$out/groups.txt"
-    groups="keyboard-light keyboard-dark ui-light ui-dark manifest"
+    groups=""
+    : > "$out/groups.txt"
     work=$(mktemp -d)
     trap 'rm -rf "$work"' EXIT
     tool="$work/screenshot-image"
@@ -274,6 +272,20 @@ prepare() {
         done
     done
     apple_captures
+    ours=""
+    for name in keyboard-light keyboard-dark; do
+        [ -f "$out/$name.png" ] && ours="$ours $name"
+    done
+    for appearance in light dark; do
+        name=ui-$appearance
+        for state in shift-auto shift-off shift-on caps-lock; do
+            [ -f "$out/$state-$appearance.jpg" ] || name=""
+        done
+        ours="$ours $name"
+    done
+    [ -s "$out/manifest.txt" ] && ours="$ours manifest"
+    printf '%s\n' $ours $groups > "$out/groups.txt"
+    echo "speakboard-screenshots: the screenshots jobs' groups, those whose images were all made:" $ours $groups
     [ "$missing" -eq 0 ] || fail "$missing screenshots that should be there are missing (see the none lines above)"
     echo "speakboard-screenshots: prepared in $out; the screenshots jobs print them"
 }
@@ -288,7 +300,7 @@ block_lines() {
 # each in $out/manifest.txt. Uses prepare's dir, out, tool, missing and groups.
 apple_captures() {
     local appearance state name source log facts ios model window keyboard device phrase width height scale
-    local points_wide points_high bytes sha top count half parts part first rows what
+    local points_wide points_high bytes sha top count pieces fits band parts part first rows what
     : > "$out/manifest.txt"
     for appearance in light dark; do
         log="$dir/apple-$appearance.log"
@@ -298,7 +310,6 @@ apple_captures() {
             facts=$(grep -o "speakboard-apple-capture name=$name\\.png .*" "$log" 2> /dev/null | tail -n 1 || true)
             if [ -z "$source" ] || [ ! -f "$source" ] || [ -z "$facts" ]; then
                 none "$name.png" "no capture $name: no attachment in $dir/apple-$appearance, or no facts line in $log"
-                groups="$groups $name"
                 missing=$((missing + 1))
                 continue
             fi
@@ -332,30 +343,47 @@ apple_captures() {
             bytes=$(wc -c < "$out/$name.png" | tr -d ' ')
             if [ "$(block_lines "$bytes")" -le "$budget" ]; then
                 parts="$name.png"
+                printf '%s\n' "$note" > "$work/$name.png.note"
             else
-                # Too big for one printing job: two halves, each lossless, each with its own job.
-                echo "speakboard-screenshots: $name.png ($bytes bytes) is over one job's $budget lines: split in two"
+                # Too big for one printing job: cut into the fewest bands of rows, 2 or more, that each fit one
+                # job, each lossless, each its own group. Bands differ in size (the blurred app above the keys
+                # makes a busier PNG), so each cut is measured and the count raised until every band fits.
+                echo "speakboard-screenshots: $name.png ($bytes bytes) is over one job's $budget lines: cutting it"
                 rm -f "$out/$name.png"
                 count=$((height * 2 / 5))
                 top=$((height - count))
-                half=$((count / 2))
-                "$tool" rows "$source" "$out/$name-top.png" "$top" "$half" > "$work/top.note" \
-                    || fail "could not cut the top half of $source"
-                "$tool" rows "$source" "$out/$name-bottom.png" "$((top + half))" "$((count - half))" \
-                    > "$work/bottom.note" || fail "could not cut the bottom half of $source"
-                parts="$name-top.png $name-bottom.png"
+                pieces=2
+                while :; do
+                    [ "$pieces" -le 12 ] || fail "$name: even 12 bands are each over one job's $budget lines"
+                    parts=""
+                    fits=1
+                    part=1
+                    while [ "$part" -le "$pieces" ]; do
+                        first=$((top + count * (part - 1) / pieces))
+                        rows=$((top + count * part / pieces - first))
+                        band="$name-$part-of-$pieces.png"
+                        "$tool" rows "$source" "$out/$band" "$first" "$rows" > "$work/$band.note" \
+                            || fail "could not cut rows $first to $((first + rows - 1)) of $source"
+                        parts="$parts $band"
+                        [ "$(block_lines "$(wc -c < "$out/$band" | tr -d ' ')")" -le "$budget" ] || fits=0
+                        part=$((part + 1))
+                    done
+                    [ "$fits" = 1 ] && break
+                    for band in $parts; do rm -f "$out/$band" "$work/$band.note"; done
+                    pieces=$((pieces + 1))
+                done
+                echo "speakboard-screenshots: $name.png cut into $pieces bands of rows, top to bottom:$parts"
             fi
             for part in $parts; do
-                case "$part" in
-                    *-top.png) note=$(cat "$work/top.note") ;;
-                    *-bottom.png) note=$(cat "$work/bottom.note") ;;
-                esac
+                note=$(cat "$work/$part.note")
                 what="Apple keyboard reference capture from a simulator, $device ($model), iOS $ios, $appearance"
                 what="$what appearance, $phrase; crop of $note; scale $scale (screen $window pt);"
                 what="$what keyboard frame $keyboard pt (x,y,width,height); full resolution, lossless PNG"
                 case "$part" in
-                    *-top.png) what="$what; the top half, with ${name}-bottom.png below it one image" ;;
-                    *-bottom.png) what="$what; the bottom half, with ${name}-top.png above it one image" ;;
+                    *-of-*.png)
+                        band=${part%.png}
+                        what="$what; band ${band#"$name"-} of $name, the bands stacked in order are one image"
+                        ;;
                 esac
                 made "$part" "$what"
                 rows=$(printf '%s\n' "$note" | sed -n 's/^rows \([0-9]*\) to \([0-9]*\) of.*/\1-\2/p')
@@ -368,7 +396,6 @@ apple_captures() {
             done
         done
     done
-    printf '%s\n' $groups > "$out/groups.txt"
     echo "speakboard-screenshots: the manifest of the captures of Apple's keyboard ($(wc -l < "$out/manifest.txt" | tr -d ' ') images):"
     cat "$out/manifest.txt"
 }
@@ -396,7 +423,7 @@ print_group() {
             return 0
             ;;
         apple-*)
-            # KEY-9: a capture of Apple's keyboard, or half of one, alone in its group.
+            # KEY-9: a capture of Apple's keyboard, or a band of one, alone in its group.
             case "$group" in
                 *[!a-z0-9-]*) fail "no group $group" ;;
             esac

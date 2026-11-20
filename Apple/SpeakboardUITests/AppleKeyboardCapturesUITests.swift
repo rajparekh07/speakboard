@@ -81,14 +81,13 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         return found
     }
 
+    /// Logs the tree on one line (so the job log stays short): each element as type:identifier/label=value.
     @MainActor
     func log(_ items: [KeyboardItem], _ title: String) {
-        say("apple keyboard tree, \(title): \(items.count) elements")
-        for item in items {
-            say(
-                "  \(item.typeName) id=\"\(item.identifier)\" label=\"\(item.label)\" value=\"\(item.value)\""
-                    + " frame=\(item.frame)")
+        let elements = items.map { item in
+            "\(item.typeName):\(item.identifier)/\(item.label)" + (item.value.isEmpty ? "" : "=\(item.value)")
         }
+        say("apple keyboard tree, \(title): \(items.count) elements: \(elements.joined(separator: " | "))")
     }
 
     /// The first element that `matches`, or a failure with the tree in the log.
@@ -177,7 +176,8 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         let environment = ProcessInfo.processInfo.environment
-        let device = environment["SIMULATOR_DEVICE_NAME"] ?? "unknown"
+        // The device type the script made the simulator from; the simulator's own name is the script's.
+        let device = environment["SPEAKBOARD_DEVICE_TYPE"] ?? environment["SIMULATOR_DEVICE_NAME"] ?? "unknown"
         let model = environment["SIMULATOR_MODEL_IDENTIFIER"] ?? "unknown"
         print(
             "speakboard-apple-capture name=\(name).png state=\(state.rawValue) appearance=\(appearance)"

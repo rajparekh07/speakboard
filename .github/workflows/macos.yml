@@ -177,7 +177,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: macos-screenshots-and-logs
-          path: .build/ci-out
+          # Not the UI tests' result bundles (KEY-9): with two more UI test runs, and a failure's diagnostics, they
+          # made this artifact 145 MB in 4,076 files (run 44787518860). Their logs and exported attachments stay.
+          path: |
+            .build/ci-out
+            !.build/ci-out/**/*.xcresult
+            !.build/ci-out/**/*.xcresult/**
           if-no-files-found: error
           retention-days: 30
 
@@ -209,14 +214,15 @@ jobs:
     # that say nothing. Not in a cancelled run (KEY-69): its prepare and upload steps still run, as always() steps
     # do on a cancel, but nobody is waiting for the images. In this job's condition, cancelled() is true only when the
     # run was cancelled, not when the apple job failed or timed out.
-    if: ${{ !cancelled() && needs.apple.outputs.screenshots-artifact != '' }}
+    if: ${{ !cancelled() && needs.apple.outputs.screenshots-artifact != '' && needs.apple.outputs.print-groups != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        # From the apple job (KEY-9): keyboard-light, keyboard-dark, ui-light, ui-dark, manifest, and one group per
-        # capture of Apple's keyboard (two for one split in halves). The fallback is never used when the job runs.
+        # From the apple job (KEY-9): of keyboard-light, keyboard-dark, ui-light, ui-dark, manifest and one group per
+        # capture of Apple's keyboard (or per band of one cut into bands), those whose images were all made. The
+        # fallback is never used when the job runs.
         group: ${{ fromJSON(needs.apple.outputs.print-groups || '["none"]') }}
     steps:
       - uses: actions/checkout@v7

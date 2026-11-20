@@ -6,7 +6,8 @@
 #   e.g. scripts/sim-keyboard.sh .build/xcode/Build/Products/Debug-iphonesimulator/Speakboard.app \
 #          "iPhone 18 Pro" com.apple.CoreSimulator.SimRuntime.iOS-27-2 .build/screenshots .build/xcode
 #
-# It makes a fresh simulator, deletes it at the end, and writes into <out dir>:
+# It makes a fresh simulator (two with <derived data>), deletes it at the end,
+# and writes into <out dir>:
 #   harness.png        the keyboard's view hosted in the app (-SpeakboardHarness)
 #   keyboard.png       the keyboard extension itself, enabled with Full Access,
 #                      in the app's text field, in light appearance
@@ -14,13 +15,16 @@
 #   keyboard.log       the extension's own log line: its height, key count and
 #                      Full Access
 # With <derived data> (where Speakboard.xcodeproj was built), it first takes
-# the reference captures of Apple's own keyboard (KEY-9): before Speakboard is
-# enabled, so the keyboard on screen can only be Apple's, it runs the UI test
-# AppleKeyboardCapturesUITests alone, once in light and once in dark
-# appearance, into apple-<appearance>.log, apple-<appearance>.xcresult and
-# apple-<appearance>/. If they fail, the typing proof below still runs, and the
-# script fails at its end. The simulator's hardware keyboard is set to
-# disconnected first (below, "The hardware keyboard").
+# the reference captures of Apple's own keyboard (KEY-9), on a fresh simulator
+# of their own where Speakboard is never enabled, so the keyboard on screen can
+# only be Apple's and the typing proof's simulator is as it was before KEY-9:
+# it runs the UI test AppleKeyboardCapturesUITests alone, once in light and
+# once in dark appearance, into apple-<appearance>.log,
+# apple-<appearance>.xcresult and apple-<appearance>/, then deletes that
+# simulator. If they fail, the typing proof below still runs, and the script
+# fails at its end. Each simulator's hardware keyboard is set to disconnected
+# first (below, "The hardware keyboard"). On any failure the script ends with a
+# short summary of the UI test logs.
 # With <derived data>, it then runs the typing proof, the
 # UI tests (scheme SpeakboardUITests, KEY-62) on this simulator, once in light
 # and once in dark appearance: they type through the extension and read the
@@ -69,26 +73,91 @@ mkdir -p "$out"
 # test fails unless Apple's on-screen keyboard is up, with its keys, before
 # each capture.
 defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
-
-udid=$(xcrun simctl create "speakboard-$$" "$device_type" "$runtime")
-defaults write com.apple.iphonesimulator DevicePreferences -dict-add "$udid" \
-    '<dict><key>ConnectHardwareKeyboard</key><false/></dict>' 2>&1 \
-    || echo "sim-keyboard: could not write the per-device hardware keyboard setting"
-echo "sim-keyboard: hardware keyboard: ConnectHardwareKeyboard reads" \
-    "$(defaults read com.apple.iphonesimulator ConnectHardwareKeyboard 2>&1 | tr '\n' ' ')"
-echo "sim-keyboard: hardware keyboard: this device's preferences read" \
-    "$(defaults read com.apple.iphonesimulator DevicePreferences 2>/dev/null \
-        | awk -v id="$udid" 'index($0, id) { on = 1 } on { printf "%s ", $0 } on && /};/ { exit }')"
 if pgrep -f 'Simulator.app/Contents/MacOS/Simulator' > /dev/null; then
     echo "sim-keyboard: hardware keyboard: the Simulator app is running"
 else
-    echo "sim-keyboard: hardware keyboard: the Simulator app is not running (the device is headless)"
+    echo "sim-keyboard: hardware keyboard: the Simulator app is not running (the devices are headless)"
 fi
+
+# hardware_keyboard_off <udid>: the per-device setting, and what both settings read back.
+hardware_keyboard_off() {
+    defaults write com.apple.iphonesimulator DevicePreferences -dict-add "$1" \
+        '<dict><key>ConnectHardwareKeyboard</key><false/></dict>' 2>&1 \
+        || echo "sim-keyboard: could not write the per-device hardware keyboard setting"
+    echo "sim-keyboard: hardware keyboard: ConnectHardwareKeyboard reads" \
+        "$(defaults read com.apple.iphonesimulator ConnectHardwareKeyboard 2>&1 | tr '\n' ' ')"
+    echo "sim-keyboard: hardware keyboard: the preferences of device $1 read" \
+        "$(defaults read com.apple.iphonesimulator DevicePreferences 2> /dev/null \
+            | awk -v id="$1" 'index($0, id) { on = 1 } on { printf "%s ", $0 } on && /};/ { exit }')"
+}
+
+# On a failure, the last lines of this step: the UI tests' failure lines and their last progress lines, from each
+# log, bounded, so a job log's tail says why (the artifact cannot be read from a session, KEY-54).
+summary() {
+    local log
+    echo "sim-keyboard: summary of the UI test logs, at most 25 lines each:"
+    for log in "$out"/apple-*.log "$out"/ui-*.log; do
+        [ -f "$log" ] || continue
+        echo "== $log"
+        grep -E 'error:|Test Case .*(passed|failed|skipped)|speakboard-ui:|speakboard-apple-capture ' "$log" \
+            | grep -v 'apple keyboard tree' | cut -c 1-400 | tail -n 25 || true
+    done
+}
+
+capture_udid=""
+udid=""
 cleanup() {
-    xcrun simctl shutdown "$udid" > /dev/null 2>&1 || true
-    xcrun simctl delete "$udid" > /dev/null 2>&1 || true
+    local code=$? device
+    for device in $capture_udid $udid; do
+        xcrun simctl shutdown "$device" > /dev/null 2>&1 || true
+        xcrun simctl delete "$device" > /dev/null 2>&1 || true
+    done
+    if [ "$code" -ne 0 ]; then
+        summary
+    fi
 }
 trap cleanup EXIT
+
+# 0. Reference captures of Apple's keyboard (KEY-9), on a fresh simulator of their own where Speakboard is never
+# enabled, deleted before the typing proof's simulator is made. Taken on the typing proof's own simulator before
+# Speakboard was enabled (run 44787518860), Apple's keyboard in use left the simulator's current keyboard setting
+# rewritten, and Speakboard did not come up for the typing proof.
+apple_status=0
+if [ -n "$derived" ]; then
+    capture_udid=$(xcrun simctl create "speakboard-apple-$$" "$device_type" "$runtime")
+    echo "sim-keyboard: simulator $capture_udid for the captures of Apple's keyboard ($device_type, $runtime)"
+    hardware_keyboard_off "$capture_udid"
+    xcrun simctl boot "$capture_udid"
+    xcrun simctl bootstatus "$capture_udid" -b > /dev/null
+    echo "sim-keyboard: its keyboards:" \
+        "$(xcrun simctl spawn "$capture_udid" defaults read .GlobalPreferences AppleKeyboards 2>&1 | tr -s ' \n' ' ')"
+    for appearance in light dark; do
+        xcrun simctl ui "$capture_udid" appearance "$appearance"
+        echo "sim-keyboard: Apple's keyboard in $appearance appearance: xcodebuild starts at $(date '+%H:%M:%S')"
+        status=0
+        TEST_RUNNER_SPEAKBOARD_APPEARANCE="$appearance" TEST_RUNNER_SPEAKBOARD_APPLE_CAPTURES=1 \
+            TEST_RUNNER_SPEAKBOARD_DEVICE_TYPE="$device_type" xcodebuild \
+            -project Speakboard.xcodeproj -scheme SpeakboardUITests -destination "id=$capture_udid" \
+            -derivedDataPath "$derived" -only-testing:SpeakboardUITests/AppleKeyboardCapturesUITests \
+            -resultBundlePath "$out/apple-$appearance.xcresult" test > "$out/apple-$appearance.log" 2>&1 || status=$?
+        echo "sim-keyboard: Apple's keyboard in $appearance appearance: xcodebuild ended at $(date '+%H:%M:%S')"
+        grep -E 'speakboard-ui:|speakboard-apple-capture |error:|Test Case .*(started|passed|failed|skipped)|TEST (SUCCEEDED|FAILED)' \
+            "$out/apple-$appearance.log" | cut -c 1-3000 || true
+        xcrun xcresulttool export attachments --path "$out/apple-$appearance.xcresult" \
+            --output-path "$out/apple-$appearance" > /dev/null 2>&1 || echo "sim-keyboard: could not export the captures"
+        if [ "$status" -ne 0 ] || grep -q 'Test Case .*skipped' "$out/apple-$appearance.log"; then
+            echo "sim-keyboard: FAIL: the captures of Apple's keyboard failed in $appearance appearance" \
+                "(see $out/apple-$appearance.log); the typing proof still runs" >&2
+            apple_status=1
+        fi
+    done
+    xcrun simctl shutdown "$capture_udid" > /dev/null 2>&1 || true
+    xcrun simctl delete "$capture_udid" > /dev/null 2>&1 || true
+    capture_udid=""
+fi
+
+udid=$(xcrun simctl create "speakboard-$$" "$device_type" "$runtime")
+hardware_keyboard_off "$udid"
 echo "sim-keyboard: simulator $udid ($device_type, $runtime); app $app_id; keyboard $ext_id"
 
 boot() {
@@ -141,34 +210,6 @@ xcrun simctl launch "$udid" "$app_id" -SpeakboardHarness > /dev/null
 sleep 5
 xcrun simctl io "$udid" screenshot "$out/harness.png" > /dev/null 2>&1
 xcrun simctl terminate "$udid" "$app_id"
-
-# 1b. Reference captures of Apple's keyboard (KEY-9), before Speakboard is enabled.
-apple_status=0
-if [ -n "$derived" ]; then
-    echo "sim-keyboard: the simulator's keyboards before Speakboard is enabled:" \
-        "$(xcrun simctl spawn "$udid" defaults read .GlobalPreferences AppleKeyboards 2>&1 | tr -s ' \n' ' ')"
-    for appearance in light dark; do
-        xcrun simctl ui "$udid" appearance "$appearance"
-        echo "sim-keyboard: Apple's keyboard in $appearance appearance: xcodebuild starts at $(date '+%H:%M:%S')"
-        status=0
-        TEST_RUNNER_SPEAKBOARD_APPEARANCE="$appearance" TEST_RUNNER_SPEAKBOARD_APPLE_CAPTURES=1 xcodebuild \
-            -project Speakboard.xcodeproj -scheme SpeakboardUITests -destination "id=$udid" \
-            -derivedDataPath "$derived" -only-testing:SpeakboardUITests/AppleKeyboardCapturesUITests \
-            -resultBundlePath "$out/apple-$appearance.xcresult" test > "$out/apple-$appearance.log" 2>&1 || status=$?
-        echo "sim-keyboard: Apple's keyboard in $appearance appearance: xcodebuild ended at $(date '+%H:%M:%S')"
-        grep -E 'speakboard-ui:|speakboard-apple-capture |error:|Test Case .*(started|passed|failed|skipped)|TEST (SUCCEEDED|FAILED)' \
-            "$out/apple-$appearance.log" || true
-        xcrun xcresulttool export attachments --path "$out/apple-$appearance.xcresult" \
-            --output-path "$out/apple-$appearance" > /dev/null 2>&1 || echo "sim-keyboard: could not export the captures"
-        if [ "$status" -ne 0 ] || grep -q 'Test Case .*skipped' "$out/apple-$appearance.log"; then
-            tail -n 40 "$out/apple-$appearance.log"
-            echo "sim-keyboard: FAIL: the captures of Apple's keyboard failed in $appearance appearance" \
-                "(see $out/apple-$appearance.log); the typing proof still runs" >&2
-            apple_status=1
-        fi
-    done
-    xcrun simctl ui "$udid" appearance light
-fi
 
 # 2. Enable the keyboard and make it the current one.
 xcrun simctl spawn "$udid" defaults write .GlobalPreferences AppleKeyboards \
