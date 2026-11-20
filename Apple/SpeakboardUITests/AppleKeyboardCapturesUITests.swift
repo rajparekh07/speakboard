@@ -45,15 +45,6 @@ struct KeyboardItem {
     }
 }
 
-/// The five states, in the order the test takes them.
-enum AppleKeyboardState: String {
-    case lettersUpper = "letters-upper"
-    case lettersLower = "letters-lower"
-    case capsLock = "caps-lock"
-    case numbers = "numbers"
-    case symbols = "symbols"
-}
-
 final class AppleKeyboardCapturesUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -175,6 +166,17 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(
             frame.minY, cropTop, "\(state.rawValue): the keyboard \(frame) starts above the crop's top, \(cropTop) pt")
         XCTAssertLessThanOrEqual(frame.maxY, window.maxY, "\(state.rawValue): the keyboard \(frame) runs off screen")
+        // The state itself, from a fresh read of the tree, at the moment of the capture (review round 1, finding 1).
+        let tree = try items(app)
+        let facts = tree.map {
+            KeyFacts(type: $0.typeName, identifier: $0.identifier, label: $0.label, value: $0.value)
+        }
+        if let problem = stateProblem(facts, state) {
+            log(tree, "\(state.rawValue) at its capture, which is not that state")
+            XCTFail("\(state.rawValue) at its capture: \(problem)")
+            return
+        }
+        say("\(state.rawValue) checked at its capture")
         let name = "apple-\(state.rawValue)-\(appearance)"
         let attachment = XCTAttachment(
             data: XCUIScreen.main.screenshot().pngRepresentation, uniformTypeIdentifier: "public.png")
