@@ -21,8 +21,8 @@ on:
     # No pull_request trigger, as in linux.yml: the push run already shows on the pull request.
     branches: [feature/sharp-einstein-aydugs, main]
   # A run started by hand (KEY-9): with captures true (the default), it takes the reference captures of Apple's
-  # keyboard whatever changed. A push takes them only when it changes a file they depend on: see
-  # scripts/captures-needed.sh.
+  # keyboard whatever changed. A push takes them only when it, or (on a branch other than main) the branch since
+  # main, changes a file they depend on: see scripts/captures-needed.sh.
   workflow_dispatch:
     inputs:
       captures:
@@ -75,8 +75,11 @@ jobs:
           CAPTURES_INPUT: ${{ inputs.captures }}
           BEFORE: ${{ github.event.before }}
           HEAD_SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          scripts/captures-needed.sh "$EVENT" "$CAPTURES_INPUT" "$BEFORE" "$HEAD_SHA" > "$RUNNER_TEMP/captures.txt"
+          # On a branch other than main the decision also compares the head with its merge base with origin/main.
+          echo "speakboard-captures: origin/main in this clone: $(git rev-parse --verify --quiet origin/main || echo none)"
+          scripts/captures-needed.sh "$EVENT" "$CAPTURES_INPUT" "$BEFORE" "$HEAD_SHA" "$BRANCH" > "$RUNNER_TEMP/captures.txt"
           cat "$RUNNER_TEMP/captures.txt" >> "$GITHUB_OUTPUT"
           echo "speakboard-captures: $(tr '\n' ' ' < "$RUNNER_TEMP/captures.txt")"
 
