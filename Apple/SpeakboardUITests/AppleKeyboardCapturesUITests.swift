@@ -294,9 +294,29 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
 
         // 3. Caps lock: a double tap on Shift from Shift off. "cd" typing "CD" proves it (with Shift alone the second
         // letter is lower case), and after deleting them it is still caps lock, which "e" typing "E" shows; deleted.
-        tap(app, try find(try items(app), "the shift key") { $0.isNamed(["shift"]) }, double: true)
-        sleep(1)
-        try typeAndCheck(app, field, "cd", expecting: "AbCD")
+        // A synthesised double tap can land as two single taps on a loaded runner (run 44799266681, light: "cd"
+        // typed "cd"), so it is tried up to three times, the letters deleted back to "Ab" between tries.
+        var capsLock = false
+        for attempt in 1...3 {
+            tap(app, try find(try items(app), "the shift key") { $0.isNamed(["shift"]) }, double: true)
+            sleep(1)
+            log(try items(app), "after double tap \(attempt) on shift")
+            for character in "cd" {
+                let key = try find(try items(app), "the key \(character)") {
+                    $0.type == .key && $0.label.lowercased() == String(character)
+                }
+                tap(app, key)
+            }
+            sleep(1)
+            let typed = (field.value as? String) ?? ""
+            say("double tap \(attempt) on shift, then cd: the field reads \(typed)")
+            if typed == "AbCD" {
+                capsLock = true
+                break
+            }
+            try delete(app, field, max(typed.count - 2, 0), expecting: ["Ab"])
+        }
+        XCTAssertTrue(capsLock, "three double taps on Shift did not give caps lock (see the speakboard-ui lines)")
         try delete(app, field, 2, expecting: ["Ab"])
         try typeAndCheck(app, field, "e", expecting: "AbE")
         try delete(app, field, 1, expecting: ["Ab"])

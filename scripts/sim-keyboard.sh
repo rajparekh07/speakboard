@@ -104,6 +104,14 @@ summary() {
     done
 }
 
+# Where the step's time goes, a phase at a time, printed as the last line at exit, pass or fail (KEY-9).
+times=""
+last=$SECONDS
+mark() {
+    times="$times $1 $((SECONDS - last))s;"
+    last=$SECONDS
+}
+
 capture_udid=""
 udid=""
 cleanup() {
@@ -115,6 +123,7 @@ cleanup() {
     if [ "$code" -ne 0 ]; then
         summary
     fi
+    echo "sim-keyboard: where the time went:$times total ${SECONDS}s"
 }
 trap cleanup EXIT
 
@@ -129,6 +138,7 @@ if [ -n "$derived" ]; then
     hardware_keyboard_off "$capture_udid"
     xcrun simctl boot "$capture_udid"
     xcrun simctl bootstatus "$capture_udid" -b > /dev/null
+    mark "capture simulator made and booted"
     # iOS shows a slide-to-type card over the keyboard the first time one comes up; on run 44793753513 it covered
     # the light capture. This preference is meant to say it was shown (its name is not documented, and is not known
     # to be right on iOS 27): the test also dismisses the card if it is up, and proves the keyboard takes taps.
@@ -149,6 +159,7 @@ if [ -n "$derived" ]; then
             -derivedDataPath "$derived" -only-testing:SpeakboardUITests/AppleKeyboardCapturesUITests \
             -resultBundlePath "$out/apple-$appearance.xcresult" test > "$out/apple-$appearance.log" 2>&1 || status=$?
         echo "sim-keyboard: Apple's keyboard in $appearance appearance: xcodebuild ended at $(date '+%H:%M:%S')"
+        mark "captures $appearance"
         grep -E 'speakboard-ui:|speakboard-apple-capture |error:|Test Case .*(started|passed|failed|skipped)|TEST (SUCCEEDED|FAILED)' \
             "$out/apple-$appearance.log" | cut -c 1-3000 || true
         xcrun xcresulttool export attachments --path "$out/apple-$appearance.xcresult" \
@@ -162,6 +173,7 @@ if [ -n "$derived" ]; then
     xcrun simctl shutdown "$capture_udid" > /dev/null 2>&1 || true
     xcrun simctl delete "$capture_udid" > /dev/null 2>&1 || true
     capture_udid=""
+    mark "capture simulator deleted"
 fi
 
 udid=$(xcrun simctl create "speakboard-$$" "$device_type" "$runtime")
@@ -288,6 +300,8 @@ case "$line" in
 esac
 echo "sim-keyboard: OK ($out/harness.png, $out/keyboard.png, $out/keyboard-dark.png)"
 
+mark "typing proof simulator, harness, keyboard enabled, screenshots"
+
 # 6. The typing proof through the extension (KEY-62), on this simulator.
 if [ -n "$derived" ]; then
     xcrun simctl terminate "$udid" "$app_id" > /dev/null 2>&1 || true
@@ -301,6 +315,7 @@ if [ -n "$derived" ]; then
             -only-testing:SpeakboardUITests/KeyboardExtensionUITests \
             -resultBundlePath "$out/ui-$appearance.xcresult" test > "$out/ui-$appearance.log" 2>&1 || status=$?
         echo "sim-keyboard: UI tests in $appearance appearance: xcodebuild ended at $(date '+%H:%M:%S')"
+        mark "typing proof $appearance"
         grep -E 'speakboard-ui:|error:|Test Case .*(started|passed|failed)|TEST (SUCCEEDED|FAILED)' \
             "$out/ui-$appearance.log" || true
         # The extension's own session lines during these tests: whether the proxy gave a document identifier.

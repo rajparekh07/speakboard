@@ -452,6 +452,44 @@ else
     echo "screenshots-from-log self-test: ok: a group name with a quote is refused (fail)"
 fi
 
+# KEY-9: the descriptions of the captures of Apple's keyboard, made by the same function prepare uses, from a facts
+# line as the UI test prints it, for every state and for a band, are printed as blocks and recovered. A character
+# the block refuses fails here (on 503073b, an apostrophe failed every printing job of a macOS run).
+facts='speakboard-apple-capture name=apple-STATE-dark.png state=STATE appearance=dark ios=27.2 model=iPhone19,2'
+facts="$facts window=402x874 keyboard=0.0,590.0,402.0,226.0 field=Ab behind=plain-system-background"
+facts="$facts device=iPhone 18 Pro"
+note='rows 1574 to 2621 of 1206x2622, 1206x1048, colour space kCGColorSpaceSRGB'
+described="$work/described"
+mkdir -p "$described"
+: > "$work/described.log"
+described_ok=1
+for state in letters-upper letters-lower caps-lock numbers symbols band; do
+    part="apple-$state-dark.png"
+    line=${facts//STATE/$state}
+    if [ "$state" = band ]; then
+        part="apple-numbers-dark-2-of-3.png"
+        line=${facts//STATE/numbers}
+    fi
+    head -c 1500 /dev/urandom > "$described/$part"
+    if ! what=$("$emit" describe "$line" "$note" "apple-${state/band/numbers}-dark" "$part" 3 2>&1) \
+        || ! "$emit" emit "$part" "$described/$part" "$what" >> "$work/described.log" 2> "$work/described.err"; then
+        echo "screenshots-from-log self-test: WRONG: the description of $part cannot be printed: $what" >&2
+        sed 's/^/    /' "$work/described.err" >&2
+        described_ok=0
+    fi
+done
+if [ "$described_ok" = 1 ] && output=$("$recover" "$work/described.log" "$work/described-images" 2>&1) \
+    && cmp -s "$described/apple-numbers-dark-2-of-3.png" "$work/described-images/apple-numbers-dark-2-of-3.png" \
+    && grep -qF "matches. Apple keyboard reference capture from a simulator, iPhone 18 Pro (iPhone19,2), iOS 27.2, dark appearance, letters, caps lock; crop of rows 1574 to 2621" <<< "$output" \
+    && grep -qF "behind the keyboard: only the plain system background of the app; full resolution, lossless PNG; band 2-of-3 of apple-numbers-dark" <<< "$output" \
+    && [ "$(ls -A "$work/described-images" | wc -l | tr -d ' ')" = 6 ]; then
+    echo "screenshots-from-log self-test: ok: the descriptions of the captures of Apple's keyboard print and recover (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: the descriptions of the captures of Apple's keyboard did not print and recover" >&2
+    echo "$output" | sed 's/^/    /' >&2
+    wrong=$((wrong + 1))
+fi
+
 # The printer refuses what the block format does not allow.
 if "$emit" emit "../x.png" "$work/one.bin" "x" > /dev/null 2>&1; then
     echo "screenshots-from-log self-test: WRONG: the printer took a name that is a path" >&2

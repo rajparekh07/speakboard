@@ -295,12 +295,54 @@ block_lines() {
     echo $(((4 * (($1 + 2) / 3) + 75) / 76 + 3))
 }
 
+# facts_value <facts line> <key>: a value from a test's speakboard-apple-capture line, with only the characters a
+# block's what text allows.
+facts_value() {
+    printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -n 1 | tr -cd 'A-Za-z0-9,.:;()/+=-'
+}
+
+# facts_device <facts line>: the device, the line's last value, which may hold spaces.
+facts_device() {
+    printf '%s' "${1##* device=}" | tr -cd 'A-Za-z0-9 ,.:;()/+=-'
+}
+
+# describe <facts line> <crop note> <capture name> <part file> <scale>: the what text of a capture of Apple's
+# keyboard, or of a band of one. Any platform: the self-test runs it, and prints and recovers a block with it, so a
+# character the block refuses fails make check, not a macOS run.
+describe() {
+    local facts="$1" note="$2" name="$3" part="$4" scale="$5" phrase behind band what
+    case "$(facts_value "$facts" state)" in
+        letters-upper) phrase="letters, upper case (automatic Shift in the empty field)" ;;
+        letters-lower) phrase="letters, lower case (Shift off)" ;;
+        caps-lock) phrase="letters, caps lock" ;;
+        numbers) phrase="the numbers and punctuation plane (after 123)" ;;
+        symbols) phrase="the symbols plane (after the symbols key in the numbers plane)" ;;
+        *) fail "the facts line of $name names no state this script knows" ;;
+    esac
+    case "$(facts_value "$facts" behind)" in
+        plain-system-background) behind="only the plain system background of the app" ;;
+        *) behind="the screen of the app" ;;
+    esac
+    what="Apple keyboard reference capture from a simulator, $(facts_device "$facts") ($(facts_value "$facts" model)),"
+    what="$what iOS $(facts_value "$facts" ios), $(facts_value "$facts" appearance) appearance, $phrase; crop of $note;"
+    what="$what scale $scale (screen $(facts_value "$facts" window) pt); keyboard frame"
+    what="$what $(facts_value "$facts" keyboard) pt (x,y,width,height); the field holds: $(facts_value "$facts" field);"
+    what="$what behind the keyboard: $behind; full resolution, lossless PNG"
+    case "$part" in
+        *-of-*.png)
+            band=${part%.png}
+            what="$what; band ${band#"$name"-} of $name, the bands stacked in order are one image"
+            ;;
+    esac
+    printf '%s\n' "$what"
+}
+
 # apple_captures: the reference captures of Apple's keyboard (KEY-9), from $dir/apple-<appearance>/ (the UI test's
 # exported attachments) and the facts in $dir/apple-<appearance>.log, into $out, each with its own group, and a line
 # each in $out/manifest.txt. Uses prepare's dir, out, tool, missing and groups.
 apple_captures() {
-    local appearance state name source log facts ios model window keyboard device phrase width height scale
-    local points_wide points_high bytes sha top count pieces fits band parts part first rows what contents behind
+    local appearance state name source log facts window width height scale
+    local points_wide points_high bytes sha top count pieces fits band parts part first rows what
     : > "$out/manifest.txt"
     for appearance in light dark; do
         log="$dir/apple-$appearance.log"
@@ -313,27 +355,7 @@ apple_captures() {
                 missing=$((missing + 1))
                 continue
             fi
-            # The facts, with only the characters a block's what text allows.
-            fact() {
-                printf '%s\n' "$facts" | tr ' ' '\n' | sed -n "s/^$1=//p" | head -n 1 | tr -cd 'A-Za-z0-9,.:;()/+=-'
-            }
-            ios=$(fact ios)
-            model=$(fact model)
-            window=$(fact window)
-            keyboard=$(fact keyboard)
-            contents=$(fact field)
-            case "$(fact behind)" in
-                plain-system-background) behind="the app's plain system background" ;;
-                *) behind="the app's screen" ;;
-            esac
-            device=$(printf '%s' "${facts##* device=}" | tr -cd 'A-Za-z0-9 ,.:;()/+=-')
-            case "$state" in
-                letters-upper) phrase="letters, upper case (automatic Shift in the empty field)" ;;
-                letters-lower) phrase="letters, lower case (Shift off)" ;;
-                caps-lock) phrase="letters, caps lock" ;;
-                numbers) phrase="the numbers and punctuation plane (after 123)" ;;
-                symbols) phrase="the symbols plane (after the symbols key in the numbers plane)" ;;
-            esac
+            window=$(facts_value "$facts" window)
             width=$(pixels "$source" pixelWidth)
             height=$(pixels "$source" pixelHeight)
             points_wide=${window%x*}
@@ -381,23 +403,14 @@ apple_captures() {
             fi
             for part in $parts; do
                 note=$(cat "$work/$part.note")
-                what="Apple keyboard reference capture from a simulator, $device ($model), iOS $ios, $appearance"
-                what="$what appearance, $phrase; crop of $note; scale $scale (screen $window pt);"
-                what="$what keyboard frame $keyboard pt (x,y,width,height); the field holds: $contents;"
-                what="$what behind the keyboard: $behind; full resolution, lossless PNG"
-                case "$part" in
-                    *-of-*.png)
-                        band=${part%.png}
-                        what="$what; band ${band#"$name"-} of $name, the bands stacked in order are one image"
-                        ;;
-                esac
+                what=$(describe "$facts" "$note" "$name" "$part" "$scale")
                 made "$part" "$what"
                 rows=$(printf '%s\n' "$note" | sed -n 's/^rows \([0-9]*\) to \([0-9]*\) of.*/\1-\2/p')
                 bytes=$(wc -c < "$out/$part" | tr -d ' ')
                 sha=$(sha256 < "$out/$part")
                 first=${part%.png}
                 groups="$groups $first"
-                printf '%s\n' "speakboard-capture name=$part state=$state appearance=$appearance ios=$ios model=$model pixels=$(pixels "$out/$part" pixelWidth)x$(pixels "$out/$part" pixelHeight) rows=$rows screen=${width}x$height scale=$scale keyboard=$keyboard field=$contents behind=$(fact behind) bytes=$bytes sha256=$sha group=$first simulator device=$device" \
+                printf '%s\n' "speakboard-capture name=$part state=$state appearance=$appearance ios=$(facts_value "$facts" ios) model=$(facts_value "$facts" model) pixels=$(pixels "$out/$part" pixelWidth)x$(pixels "$out/$part" pixelHeight) rows=$rows screen=${width}x$height scale=$scale keyboard=$(facts_value "$facts" keyboard) field=$(facts_value "$facts" field) behind=$(facts_value "$facts" behind) bytes=$bytes sha256=$sha group=$first simulator device=$(facts_device "$facts")" \
                     >> "$out/manifest.txt"
             done
         done
@@ -498,6 +511,10 @@ case "${1:-}" in
     print)
         [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || fail "usage: $0 print <prepared dir> <group> [<budget lines>]"
         print_group "$2" "$3" "${4:-$default_budget}"
+        ;;
+    describe)
+        [ "$#" -eq 6 ] || fail "usage: $0 describe <facts line> <crop note> <capture name> <part file> <scale>"
+        describe "$2" "$3" "$4" "$5" "$6"
         ;;
     groups)
         [ "$#" -eq 2 ] || fail "usage: $0 groups <prepared dir>"
