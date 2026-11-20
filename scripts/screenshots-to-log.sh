@@ -337,15 +337,25 @@ describe() {
     printf '%s\n' "$what"
 }
 
+# expect_check <0|3> <failure message> <image tool check arguments...>: runs a check of scripts/screenshot-image.swift
+# (it exits 0 when the check holds, 3 when it does not, 1 on an error) and fails unless it exits <0|3>.
+expect_check() {
+    local want="$1" message="$2" code=0
+    shift 2
+    "$tool" "$@" || code=$?
+    [ "$code" = "$want" ] || fail "$message (the image tool exited $code, not $want)"
+}
+
 # apple_captures: the reference captures of Apple's keyboard (KEY-9), from $dir/apple-<appearance>/ (the UI test's
 # exported attachments) and the facts in $dir/apple-<appearance>.log, into $out, each with its own group, and a line
 # each in $out/manifest.txt. Uses prepare's dir, out, tool, missing and groups.
 apple_captures() {
     local appearance state name source log facts window width height scale
-    local points_wide points_high bytes sha top count pieces fits band parts part first rows what
+    local points_wide points_high bytes sha top count pieces fits band parts part first rows what checks bottom crop
     : > "$out/manifest.txt"
     for appearance in light dark; do
         log="$dir/apple-$appearance.log"
+        checks=""
         for state in letters-upper letters-lower caps-lock numbers symbols; do
             name="apple-$state-$appearance"
             source=$(attachment "$dir/apple-$appearance" "$name")
@@ -367,6 +377,15 @@ apple_captures() {
             [ "$((scale * points_wide))" = "$width" ] && [ "$((scale * points_high))" = "$height" ] \
                 || fail "$name: $width x $height pixels is not a whole multiple of the window, $window pt"
             shape "$source" "$out/$name.png" png 1
+            # The panel's top edge is inside the crop: its first rows are one colour, the background above the
+            # panel (review round 1, finding 2).
+            cp "$out/$name.png" "$work/check-$name.png"
+            expect_check 0 "$name: the top 10 rows of its crop are not one colour, so the top edge of the panel may be outside the crop" \
+                uniform "$work/check-$name.png" 0 10
+            checks="$checks $work/check-$name.png"
+            bottom=$(printf '%s\n' "$(facts_value "$facts" keyboard)" \
+                | awk -F, -v scale="$scale" -v top="$((height - height * 2 / 5))" '{ printf "%d", ($2 + $4) * scale - top }')
+            crop=$((height * 2 / 5))
             bytes=$(wc -c < "$out/$name.png" | tr -d ' ')
             if [ "$(block_lines "$bytes")" -le "$budget" ]; then
                 parts="$name.png"
@@ -414,6 +433,18 @@ apple_captures() {
                     >> "$out/manifest.txt"
             done
         done
+        # Within one appearance, the background above the panel and the strip below the keys are the same in all
+        # five captures, which a transient (a card, a panel still settling) would break. Each check is first shown
+        # able to fail, on images it must refuse.
+        set -- $checks
+        if [ "$#" -eq 5 ]; then
+            expect_check 3 "the one-colour check passed a whole crop, keys and all: it cannot fail" uniform "$1" 0 "$crop"
+            expect_check 3 "the sameness check passed letters upper case against numbers: it cannot fail" \
+                same 0 "$crop" "$1" "$4"
+            expect_check 0 "$appearance: the background above the panel differs between the captures" same 0 10 "$@"
+            expect_check 0 "$appearance: the strip below the keys (crop rows $bottom on) differs between the captures" \
+                same "$bottom" "$((crop - bottom))" "$@"
+        fi
     done
     echo "speakboard-screenshots: the manifest of the captures of Apple's keyboard ($(wc -l < "$out/manifest.txt" | tr -d ' ') images):"
     cat "$out/manifest.txt"

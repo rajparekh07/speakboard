@@ -4,6 +4,11 @@
 //
 //   screenshot-image <in> <out> <png|jpeg> <divisor>
 //   screenshot-image rows <in> <out> <first row> <row count>
+//   screenshot-image uniform <png> <first row> <row count>
+//   screenshot-image same <first row> <row count> <png>...
+//
+// The last two are checks (see them below the helpers), used by prepare on the
+// captures of Apple's keyboard.
 //
 // The first form keeps the bottom 2/5 of the image (the keyboard region of a
 // portrait iPhone screenshot), full width, then divides its width and height
@@ -80,6 +85,49 @@ func request(_ arguments: [String]) -> Request {
         fail("usage: screenshot-image <in> <out> <png|jpeg> <divisor> | rows <in> <out> <first row> <row count>")
     }
     return Request(input: arguments[1], output: arguments[2], format: arguments[3], divisor: divisor, rows: nil)
+}
+
+/// The pixels of rows `first` to `first + count - 1` of the image at `path`, as 8-bit RGBA in sRGB.
+func rowPixels(_ path: String, _ first: Int, _ count: Int) -> (width: Int, bytes: [UInt8]) {
+    let whole = image(at: path)
+    guard first >= 0, count >= 1, first + count <= whole.height,
+        let band = whole.cropping(to: CGRect(x: 0, y: first, width: whole.width, height: count)),
+        let space = CGColorSpace(name: CGColorSpace.sRGB)
+    else { fail("rows \(first) to \(first + count - 1) are not all in \(path)") }
+    return (band.width, pixels(band, in: space))
+}
+
+// The checks of the captures of Apple's keyboard (KEY-9 review round 1, finding 2). Each prints one line, and exits
+// 0 when the check holds, 3 when it does not (1 is an error):
+//   screenshot-image uniform <png> <first row> <row count>    those rows are one colour
+//   screenshot-image same <first row> <row count> <png>...    those rows are identical in every image
+let checkArguments = CommandLine.arguments
+if checkArguments.count == 5, checkArguments[1] == "uniform",
+    let first = Int(checkArguments[3]), let count = Int(checkArguments[4])
+{
+    let path = checkArguments[2]
+    let (width, bytes) = rowPixels(path, first, count)
+    for index in stride(from: 4, to: bytes.count, by: 4) where bytes[index..<index + 4] != bytes[0..<4] {
+        let pixel = index / 4
+        let at = "(\(pixel % width), \(first + pixel / width))"
+        print("not uniform: rows \(first) to \(first + count - 1) of \(path): pixel \(at) differs from (0, \(first))")
+        exit(3)
+    }
+    let colour = bytes[0..<3].map { String(format: "%02x", $0) }.joined()
+    print("uniform: rows \(first) to \(first + count - 1) of \(path) are all #\(colour)")
+    exit(0)
+}
+if checkArguments.count >= 6, checkArguments[1] == "same", let first = Int(checkArguments[2]),
+    let count = Int(checkArguments[3])
+{
+    let paths = Array(checkArguments[4...])
+    let reference = rowPixels(paths[0], first, count)
+    for path in paths.dropFirst() where rowPixels(path, first, count).bytes != reference.bytes {
+        print("differ: rows \(first) to \(first + count - 1) of \(path) are not those of \(paths[0])")
+        exit(3)
+    }
+    print("same: rows \(first) to \(first + count - 1) in all \(paths.count) images")
+    exit(0)
 }
 
 let asked = request(CommandLine.arguments)
