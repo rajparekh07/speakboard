@@ -10,9 +10,10 @@
 # that the built extension loads no SwiftUI and no networking
 # framework (what these checks cannot see is in scripts/extension-guard.sh),
 # runs the unit tests, takes screenshots of our keyboard in the simulator,
-# types through the keyboard extension there with UI tests (KEY-62), and
-# prepares the screenshots that the screenshots jobs print into their job logs
-# as text (KEY-68).
+# types through the keyboard extension there with UI tests (KEY-62), takes
+# reference captures of Apple's own keyboard in ten states before Speakboard is
+# enabled (KEY-9), and prepares the screenshots and captures that the
+# screenshots jobs print into their job logs as text (KEY-68).
 name: macos
 
 on:
@@ -46,6 +47,8 @@ jobs:
     outputs:
       # The prepared screenshots' artifact id, set only when they were uploaded: the screenshots jobs run on it.
       screenshots-artifact: ${{ steps.upload-log-images.outputs.artifact-id }}
+      # The screenshots jobs' groups, a JSON array from the prepare step's groups.txt (KEY-9): one job per group.
+      print-groups: ${{ steps.log-images.outputs.groups }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -142,6 +145,10 @@ jobs:
           fi
           echo "speakboard-screenshots: $count prepared images"
           if [ "$count" -gt 0 ]; then echo "any=true" >> "$GITHUB_OUTPUT"; else echo "any=false" >> "$GITHUB_OUTPUT"; fi
+          if groups=$(scripts/screenshots-to-log.sh groups "$OUT/log-images"); then
+            echo "speakboard-screenshots: the screenshots jobs' groups: $groups"
+            echo "groups=$groups" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload the prepared screenshots
         id: upload-log-images
@@ -165,10 +172,14 @@ jobs:
       # KEY-69: the screenshots jobs run on the upload's artifact-id. If it ever came back empty after an upload that
       # succeeded (a renamed step id, a change in the action), they would all be skipped and a green run would carry
       # no screenshots without anyone seeing it; this makes that red.
+      # KEY-9: the same for the groups the screenshots jobs' matrix is made from.
       - name: The prepared screenshots' artifact has an id
-        if: always() && steps.upload-log-images.outcome == 'success' && steps.upload-log-images.outputs.artifact-id == ''
+        if: >-
+          always() && steps.upload-log-images.outcome == 'success'
+          && (steps.upload-log-images.outputs.artifact-id == '' || steps.log-images.outputs.groups == '')
         run: |
-          echo "the upload of the prepared screenshots succeeded but gave no artifact-id: the screenshots jobs would be skipped" >&2
+          echo "the upload of the prepared screenshots succeeded, but gave no artifact-id or there are no groups:" \
+            "the screenshots jobs would be skipped" >&2
           exit 1
 
   # KEY-68: the screenshots as text in job logs an agent can read whole. Agents cannot download artifacts (KEY-54),
@@ -192,7 +203,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [keyboard-light, keyboard-dark, ui-light, ui-dark]
+        # From the apple job (KEY-9): keyboard-light, keyboard-dark, ui-light, ui-dark, manifest, and one group per
+        # capture of Apple's keyboard (two for one split in halves). The fallback is never used when the job runs.
+        group: ${{ fromJSON(needs.apple.outputs.print-groups || '["none"]') }}
     steps:
       - uses: actions/checkout@v7
         with:

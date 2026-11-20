@@ -405,6 +405,53 @@ else
     echo "screenshots-from-log self-test: ok: a group with a screenshot other than Apple's missing fails (fail)"
 fi
 
+# KEY-9: a capture of Apple's keyboard in its own group, the manifest group, and the groups as JSON for the matrix.
+apple="$work/apple"
+mkdir -p "$apple"
+head -c 3001 /dev/urandom > "$apple/apple-numbers-dark.png"
+printf '%s\t%s\n' apple-numbers-dark.png "Apple keyboard reference capture from a simulator; crop of rows 1574 to 2621" \
+    > "$apple/what.tsv"
+: > "$apple/none.txt"
+echo "speakboard-capture name=apple-numbers-dark.png state=numbers group=apple-numbers-dark" > "$apple/manifest.txt"
+printf '%s\n' keyboard-light manifest apple-numbers-dark apple-symbols-dark-top > "$apple/groups.txt"
+if "$emit" print "$apple" apple-numbers-dark > "$work/apple.out" 2>&1 && stamp < "$work/apple.out" > "$work/apple.log" \
+    && output=$("$recover" "$work/apple.log" "$work/apple-images" 2>&1) \
+    && cmp -s "$apple/apple-numbers-dark.png" "$work/apple-images/apple-numbers-dark.png"; then
+    echo "screenshots-from-log self-test: ok: a capture of Apple's keyboard printed by its own group is recovered (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: a capture of Apple's keyboard in its own group was not recovered" >&2
+    sed 's/^/    /' "$work/apple.out" >&2
+    wrong=$((wrong + 1))
+fi
+if "$emit" print "$apple" apple-symbols-dark-top > "$work/apple-missing.out" 2>&1; then
+    echo "screenshots-from-log self-test: WRONG: a group whose capture of Apple's keyboard is missing passed" >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: a group whose capture of Apple's keyboard is missing fails (fail)"
+fi
+if "$emit" print "$apple" manifest > "$work/manifest.out" 2>&1 \
+    && grep -qF "speakboard-capture name=apple-numbers-dark.png state=numbers" "$work/manifest.out"; then
+    echo "screenshots-from-log self-test: ok: the manifest group prints the manifest (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: the manifest group did not print the manifest" >&2
+    sed 's/^/    /' "$work/manifest.out" >&2
+    wrong=$((wrong + 1))
+fi
+if json=$("$emit" groups "$apple" 2>&1) \
+    && [ "$json" = '["keyboard-light","manifest","apple-numbers-dark","apple-symbols-dark-top"]' ]; then
+    echo "screenshots-from-log self-test: ok: the groups as JSON for the matrix (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: the groups as JSON: $json" >&2
+    wrong=$((wrong + 1))
+fi
+echo 'apple-x"y' >> "$apple/groups.txt"
+if "$emit" groups "$apple" > /dev/null 2>&1; then
+    echo "screenshots-from-log self-test: WRONG: a group name with a quote went into the matrix's JSON" >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: a group name with a quote is refused (fail)"
+fi
+
 # The printer refuses what the block format does not allow.
 if "$emit" emit "../x.png" "$work/one.bin" "x" > /dev/null 2>&1; then
     echo "screenshots-from-log self-test: WRONG: the printer took a name that is a path" >&2
