@@ -119,7 +119,19 @@ jobs:
             -destination "platform=iOS Simulator,name=$SIM_DEVICE,OS=27.2" \
             -derivedDataPath "$DERIVED_DATA" test 2>&1 | tee "$OUT/xcodebuild-test.log" \
             | grep -E '(error|warning):|Test run with|✘|TEST (SUCCEEDED|FAILED)' || true
-          grep -q '\*\* TEST SUCCEEDED \*\*' "$OUT/xcodebuild-test.log"
+          # KEY-9: the filter above shows a passing run; a failing one needs more, and the artifact cannot be read
+          # from a session (KEY-54). So on a failure, a bounded excerpt of the full log: the lines that name a
+          # failure, with three lines around each (at most 150 lines), then the log's last 60 lines.
+          log="$OUT/xcodebuild-test.log"
+          if ! grep -q '\*\* TEST SUCCEEDED \*\*' "$log"; then
+            echo "== the unit tests failed; $log has $(wc -l < "$log" | tr -d ' ') lines"
+            echo "== its lines that name a failure, with three lines around each (at most 150 lines):"
+            grep -n -B 3 -A 3 -E 'error|[Ff]ail|✘|[Tt]imed out|[Cc]rash|[Cc]ancel|[Uu]nable to|[Cc]ould not|[Ee]xception' "$log" \
+              | head -n 150 || true
+            echo "== its last 60 lines:"
+            tail -n 60 "$log"
+            exit 1
+          fi
 
       - name: The keyboard in the simulator, screenshots and the typing proof
         id: sim
