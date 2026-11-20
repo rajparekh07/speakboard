@@ -28,7 +28,9 @@
 #             Apple's keyboard, when the UI test found it up before it switched
 #             to Speakboard, as the others. When a run has not got it, a line
 #             in none.txt says so; that is not a failure.
-#         apple-<state>-<appearance>.png, for each state letters-upper,
+#         apple-<state>-<appearance>.png (unless SPEAKBOARD_CAPTURES is set
+#         to anything but true: then none, and no manifest lines; see
+#         scripts/captures-needed.sh), for each state letters-upper,
 #         letters-lower, caps-lock, numbers and symbols, and each appearance
 #             the reference captures of Apple's keyboard (KEY-9), from
 #             AppleKeyboardCapturesUITests' attachments in apple-<appearance>/
@@ -271,7 +273,13 @@ prepare() {
             fi
         done
     done
-    apple_captures
+    if [ "${SPEAKBOARD_CAPTURES:-true}" = true ]; then
+        apple_captures
+    else
+        : > "$out/manifest.txt"
+        echo "speakboard-screenshots: this run has no reference captures of Apple's keyboard:" \
+            "${SPEAKBOARD_CAPTURES_WHY:-SPEAKBOARD_CAPTURES is $SPEAKBOARD_CAPTURES}"
+    fi
     ours=""
     for name in keyboard-light keyboard-dark; do
         [ -f "$out/$name.png" ] && ours="$ours $name"
@@ -327,14 +335,28 @@ describe() {
     what="$what iOS $(facts_value "$facts" ios), $(facts_value "$facts" appearance) appearance, $phrase; crop of $note;"
     what="$what scale $scale (screen $(facts_value "$facts" window) pt); keyboard frame"
     what="$what $(facts_value "$facts" keyboard) pt (x,y,width,height); the field holds: $(facts_value "$facts" field);"
-    what="$what behind the keyboard: $behind; full resolution, lossless PNG"
+    what="$what behind the keyboard: $behind; full resolution, lossless PNG; CI run $(run_id), commit $(commit_sha)"
     case "$part" in
         *-of-*.png)
             band=${part%.png}
             what="$what; band ${band#"$name"-} of $name, the bands stacked in order are one image"
             ;;
     esac
+    # The block allows only these characters (see emit). Refused here, prepare fails on the Mac, rather than every
+    # printing job afterwards (KEY-9 review round 1, finding 7).
+    case "$what" in
+        *[!A-Za-z0-9\ ,.:\;\(\)/+=x-]*) fail "the description of $part has a character the block does not allow: $what" ;;
+    esac
     printf '%s\n' "$what"
+}
+
+# run_id, commit_sha: the CI run and the commit a capture was made in, from the workflow's environment (GITHUB_RUN_ID,
+# GITHUB_SHA), or "none" outside CI. A measured design token cites the run id, the capture's name and its SHA-256.
+run_id() {
+    printf '%s' "${GITHUB_RUN_ID:-none}" | tr -cd '0-9a-z'
+}
+commit_sha() {
+    printf '%s' "${GITHUB_SHA:-none}" | tr -cd '0-9a-z'
 }
 
 # expect_check <0|3> <failure message> <image tool check arguments...>: runs a check of scripts/screenshot-image.swift
@@ -429,7 +451,7 @@ apple_captures() {
                 sha=$(sha256 < "$out/$part")
                 first=${part%.png}
                 groups="$groups $first"
-                printf '%s\n' "speakboard-capture name=$part state=$state appearance=$appearance ios=$(facts_value "$facts" ios) model=$(facts_value "$facts" model) pixels=$(pixels "$out/$part" pixelWidth)x$(pixels "$out/$part" pixelHeight) rows=$rows screen=${width}x$height scale=$scale keyboard=$(facts_value "$facts" keyboard) field=$(facts_value "$facts" field) behind=$(facts_value "$facts" behind) bytes=$bytes sha256=$sha group=$first simulator device=$(facts_device "$facts")" \
+                printf '%s\n' "speakboard-capture name=$part state=$state appearance=$appearance ios=$(facts_value "$facts" ios) model=$(facts_value "$facts" model) pixels=$(pixels "$out/$part" pixelWidth)x$(pixels "$out/$part" pixelHeight) rows=$rows screen=${width}x$height scale=$scale keyboard=$(facts_value "$facts" keyboard) field=$(facts_value "$facts" field) behind=$(facts_value "$facts" behind) bytes=$bytes sha256=$sha group=$first run=$(run_id) commit=$(commit_sha) simulator device=$(facts_device "$facts")" \
                     >> "$out/manifest.txt"
             done
         done

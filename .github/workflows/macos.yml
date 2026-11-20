@@ -20,6 +20,15 @@ on:
   push:
     # No pull_request trigger, as in linux.yml: the push run already shows on the pull request.
     branches: [feature/sharp-einstein-aydugs, main]
+  # A run started by hand (KEY-9): with captures true (the default), it takes the reference captures of Apple's
+  # keyboard whatever changed. A push takes them only when it changes a file they depend on: see
+  # scripts/captures-needed.sh.
+  workflow_dispatch:
+    inputs:
+      captures:
+        description: Take the reference captures of Apple's keyboard (KEY-9)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -43,7 +52,9 @@ env:
 jobs:
   apple:
     runs-on: xcode-27
-    timeout-minutes: 60
+    # The simulator step has its own 40-minute limit (below). The job's other steps took at most about 16 minutes on
+    # the runs of KEY-9 (make check-native 5, the build 1, the unit tests up to 8, the rest 2), so 75 leaves room.
+    timeout-minutes: 75
     outputs:
       # The prepared screenshots' artifact id, set only when they were uploaded: the screenshots jobs run on it.
       screenshots-artifact: ${{ steps.upload-log-images.outputs.artifact-id }}
@@ -53,6 +64,21 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # The whole history, so scripts/captures-needed.sh can see what a push changed.
+          fetch-depth: 0
+
+      # KEY-9: whether this run takes the reference captures of Apple's keyboard, and why, in one line.
+      - name: Does this run take the reference captures of Apple's keyboard?
+        id: captures
+        env:
+          EVENT: ${{ github.event_name }}
+          CAPTURES_INPUT: ${{ inputs.captures }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          scripts/captures-needed.sh "$EVENT" "$CAPTURES_INPUT" "$BEFORE" "$HEAD_SHA" > "$RUNNER_TEMP/captures.txt"
+          cat "$RUNNER_TEMP/captures.txt" >> "$GITHUB_OUTPUT"
+          echo "speakboard-captures: $(tr '\n' ' ' < "$RUNNER_TEMP/captures.txt")"
 
       - name: Select Xcode
         run: sudo xcode-select -s "$XCODE_APP/Contents/Developer"
@@ -135,6 +161,12 @@ jobs:
 
       - name: The keyboard in the simulator, screenshots and the typing proof
         id: sim
+        # Its own limit (KEY-9): the slowest run with captures took 32.5 minutes here (503073b). A slow run then
+        # fails this step inside the job's 75 minutes, and the steps after it (prepare, upload) still run.
+        timeout-minutes: 40
+        env:
+          SPEAKBOARD_CAPTURES: ${{ steps.captures.outputs.captures }}
+          SPEAKBOARD_CAPTURES_WHY: ${{ steps.captures.outputs.why }}
         run: |
           scripts/sim-keyboard.sh "$DERIVED_DATA/Build/Products/Debug-iphonesimulator/Speakboard.app" \
             "$SIM_DEVICE" "$SIM_RUNTIME" "$OUT/screenshots" "$DERIVED_DATA"
@@ -143,6 +175,9 @@ jobs:
       - name: Prepare the screenshots for the screenshots jobs
         id: prepare
         if: always() && steps.sim.outcome != 'skipped'
+        env:
+          SPEAKBOARD_CAPTURES: ${{ steps.captures.outputs.captures }}
+          SPEAKBOARD_CAPTURES_WHY: ${{ steps.captures.outputs.why }}
         run: scripts/screenshots-to-log.sh prepare "$OUT/screenshots" "$OUT/log-images"
 
       # KEY-69: only when at least one image was made. A simulator step that fails early leaves a folder with only
@@ -209,11 +244,13 @@ jobs:
   screenshots:
     name: screenshots (${{ matrix.group }})
     needs: apple
-    # Only when the apple job uploaded the prepared screenshots (at least one image), whether it then passed, failed
-    # or timed out: an apple job that fails before then leaves no artifact, and these jobs would only add failures
-    # that say nothing. Not in a cancelled run (KEY-69): its prepare and upload steps still run, as always() steps
-    # do on a cancel, but nobody is waiting for the images. In this job's condition, cancelled() is true only when the
-    # run was cancelled, not when the apple job failed or timed out.
+    # Only when the apple job uploaded the prepared screenshots (at least one image), whether it then passed or
+    # failed, the simulator step's own 40-minute timeout included (a step that times out fails, and the prepare and
+    # upload steps after it still run): an apple job that fails before then leaves no artifact, and these jobs would
+    # only add failures that say nothing. Not in a cancelled run (KEY-69): its prepare and upload steps still run,
+    # as always() steps do on a cancel, but nobody is waiting for the images. In this job's condition, cancelled() is
+    # true only when the run was cancelled, not when the apple job failed. What happens on the job's own timeout is
+    # not shown.
     if: ${{ !cancelled() && needs.apple.outputs.screenshots-artifact != '' && needs.apple.outputs.print-groups != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -236,4 +273,6 @@ jobs:
           path: log-images
 
       - name: Print the screenshots into the job log
-        run: scripts/screenshots-to-log.sh print log-images "${{ matrix.group }}"
+        env:
+          GROUP: ${{ matrix.group }}
+        run: scripts/screenshots-to-log.sh print log-images "$GROUP"

@@ -14,7 +14,8 @@
 #   keyboard-dark.png  the same in dark appearance
 #   keyboard.log       the extension's own log line: its height, key count and
 #                      Full Access
-# With <derived data> (where Speakboard.xcodeproj was built), it first takes
+# With <derived data> (where Speakboard.xcodeproj was built), and unless
+# SPEAKBOARD_CAPTURES is set to anything but true, it first takes
 # the reference captures of Apple's own keyboard (KEY-9), on a fresh simulator
 # of their own where Speakboard is never enabled, so the keyboard on screen can
 # only be Apple's and the typing proof's simulator is as it was before KEY-9:
@@ -131,8 +132,17 @@ trap cleanup EXIT
 # enabled, deleted before the typing proof's simulator is made. Taken on the typing proof's own simulator before
 # Speakboard was enabled (run 44787518860), Apple's keyboard in use left the simulator's current keyboard setting
 # rewritten, and Speakboard did not come up for the typing proof.
+# They run only when SPEAKBOARD_CAPTURES is true, or unset (by hand); the workflow sets it from
+# scripts/captures-needed.sh, with the reason in SPEAKBOARD_CAPTURES_WHY.
 apple_status=0
-if [ -n "$derived" ]; then
+captures=no
+if [ -n "$derived" ] && [ "${SPEAKBOARD_CAPTURES:-true}" = true ]; then
+    captures=yes
+    echo "sim-keyboard: this run takes the reference captures of Apple's keyboard: ${SPEAKBOARD_CAPTURES_WHY:-asked for by hand}"
+elif [ -n "$derived" ]; then
+    echo "sim-keyboard: this run takes no reference captures of Apple's keyboard: ${SPEAKBOARD_CAPTURES_WHY:-SPEAKBOARD_CAPTURES is $SPEAKBOARD_CAPTURES}"
+fi
+if [ "$captures" = yes ]; then
     capture_udid=$(xcrun simctl create "speakboard-apple-$$" "$device_type" "$runtime")
     echo "sim-keyboard: simulator $capture_udid for the captures of Apple's keyboard ($device_type, $runtime)"
     hardware_keyboard_off "$capture_udid"
@@ -335,5 +345,7 @@ if [ -n "$derived" ]; then
         echo "sim-keyboard: FAIL: the captures of Apple's keyboard failed (see the FAIL lines above)" >&2
         exit 1
     fi
-    echo "sim-keyboard: OK: the captures of Apple's keyboard, in light and dark appearance"
+    if [ "$captures" = yes ]; then
+        echo "sim-keyboard: OK: the captures of Apple's keyboard, in light and dark appearance"
+    fi
 fi

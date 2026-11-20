@@ -126,10 +126,12 @@ guard-literals: $(DOCKER_READY)
 	@$(RUN) bash -c '$(FRONTEND) scripts/literal-guard-selftest.sh && scripts/literal-guard.sh'
 
 # screenshots-selftest: the self-test of scripts/screenshots-from-log.sh, which
-# recovers the keyboard's screenshots from a saved macOS CI job log (KEY-68).
-# It runs in the Swift image, as the recovery runs there, and natively on macOS.
+# recovers the keyboard's screenshots from a saved macOS CI job log (KEY-68),
+# and of scripts/captures-needed.sh, which decides whether a macOS CI run takes
+# the reference captures of Apple's keyboard (KEY-9). They run in the Swift
+# image, as the recovery runs there, and natively on macOS.
 screenshots-selftest: $(DOCKER_READY)
-	@$(RUN) scripts/screenshots-from-log-selftest.sh
+	@$(RUN) bash -c 'scripts/screenshots-from-log-selftest.sh && scripts/captures-needed-selftest.sh'
 
 # metrics-check: the pinned token export matches DesignTokens/tokens.pin, and the
 # committed generated files (the metrics tables and the drawing tokens) are
