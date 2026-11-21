@@ -9,9 +9,11 @@
 # <saved job log> is either the plain log (each line maybe starting with the
 # timestamp GitHub adds, such as `2026-11-18T00:41:58.1234567Z `, the first
 # maybe with a byte order mark; CRLF line ends are taken too), or the JSON the
-# GitHub job-log tool returns with return_content, {"job_id":...,
-# "logs_content":"<the log>",...}, as it is saved to a file when it is too long
-# to show. <out dir> must not exist or be empty: it gets one file per block,
+# GitHub job-log tool returns with return_content, as it is saved to a file
+# when it is too long to show: one job's, {"job_id":...,"logs_content":"<the
+# log>",...}, or a failed-only fetch by run id, {...,"logs":[{"job_id":...,
+# "job_name":...,"logs_content":"<the log>",...}],...}, when that holds exactly
+# one job. <out dir> must not exist or be empty: it gets one file per block,
 # under the block's name.
 #
 # It fails, naming the line, and writes no image, when the log is not whole:
@@ -22,22 +24,37 @@
 #     characters before its last line, or a begin line it cannot read;
 #   - a name used twice (names that differ only in case count as one), or a
 #     name that is not a plain file name;
-#   - in the job-log tool's JSON, anything after the logs_content string but
-#     the end of that JSON object (two files run together, say);
+#   - in the job-log tool's JSON, anything after the end of the JSON object
+#     (two files run together, say), or the logs of more than one job (a
+#     failed-only fetch by run id when several jobs failed: fetch one job by
+#     its job_id);
 #   - an image whose decoded bytes do not have the byte count and SHA-256 its
 #     begin line gives (a line lost or a character changed);
 #   - no blocks at all.
 # It prints each `speakboard-screenshot none` line it finds: those say that a
 # run had no screenshot of something (Apple's keyboard, say), and are not a
-# failure. What it prints from the log has its control characters shown as
-# "?". Each image's SHA-256 is checked again after it is copied to <out dir>.
+# failure. Everything it prints, on standard output and in its failure
+# messages, has every byte but a newline and printable ASCII shown as "?", so
+# no control character from the log reaches the terminal, 8-bit ones (0x80 to
+# 0x9f, alone or in UTF-8) included. The images are copied into a new folder
+# beside <out dir>, each SHA-256 is checked again there, and only when every
+# check has passed does that folder become <out dir>.
 #
 # Written for the bash 3.2 at /bin/bash and the tools macOS ships, and for the
-# Linux Swift image (mawk, GNU coreutils).
+# Linux Swift image (mawk, GNU coreutils). Its awk runs in the C locale, so it
+# reads the log as bytes: macOS's awk, in a UTF-8 locale, stops on a byte that
+# is not UTF-8 ("towc: multibyte conversion failure", KEY-69).
 set -euo pipefail
 
+# Text from the log that this prints (the none lines, the what text, and the log lines its failure messages quote)
+# with every byte but a newline and printable ASCII shown as "?", so a log cannot drive the terminal it is read in:
+# an escape sequence's ESC, and 8-bit controls such as 0x9b (CSI), alone or as the second byte of their UTF-8 form.
+printable() {
+    LC_ALL=C tr -c '\n\040-\176' '?'
+}
+
 fail() {
-    echo "screenshots-from-log: FAIL: $1" >&2
+    printf '%s\n' "screenshots-from-log: FAIL: $1" | printable >&2
     exit 1
 }
 
@@ -47,6 +64,8 @@ if [ "$#" -ne 2 ]; then
 fi
 log=$1
 out=$2
+# Without trailing slashes, so the folder beside it and the last move name it plainly.
+while [ "${#out}" -gt 1 ] && [ "${out%/}" != "$out" ]; do out=${out%/}; done
 
 [ -f "$log" ] || fail "no file $log"
 if [ -e "$out" ]; then
@@ -64,13 +83,6 @@ sha256() {
     fi
 }
 
-# Text from the log that this prints (the none lines, the what text) with control characters, an escape
-# sequence's ESC among them, shown as "?", so a log cannot drive the terminal it is read in.
-printable() {
-    # 9 + 21 + 1 characters in the first set, 31 question marks: no tr repeat syntax, which busybox lacks.
-    LC_ALL=C tr '\001-\011\013-\037\177' '???????????????????????????????'
-}
-
 decode_base64() {
     # GNU and macOS (13 and later) base64 both take -d.
     base64 -d
@@ -83,10 +95,12 @@ trap 'rm -rf "$work"' EXIT
 # string: decode it (\n, \t, \r, \", \\, \/, \b, \f, and \uXXXX; a \u escape
 # above ASCII becomes "?", which no block line has). Split at backslashes, so
 # each piece after the first starts with an escape, and the work is linear in
-# the log's length.
+# the log's length. What is around that string is read as JSON structure
+# (brackets outside strings): it must be one of the tool's two shapes, with
+# one logs_content string, and nothing after the object's end.
 first=$(head -c 1 "$log")
 if [ "$first" = "{" ]; then
-    awk '
+    LC_ALL=C awk '
         { doc = doc (NR > 1 ? "\n" : "") $0 }
         function hexvalue(hex,    i, value) {
             value = 0
@@ -94,6 +108,39 @@ if [ "$first" = "{" ]; then
                 value = value * 16 + index("0123456789abcdef", tolower(substr(hex, i, 1))) - 1
             }
             return value
+        }
+        function stop(message) {
+            print "screenshots-from-log: FAIL: " message > "/dev/stderr"
+            exit 3
+        }
+        # Walks the JSON text `text` (no unfinished string at its start) from the open brackets `stack`, skipping
+        # strings, and returns the brackets still open after it. Sets `closedat` to the position where the last one
+        # closed, if one did (and stops there), and stops on a bracket that closes another kind.
+        function skeleton(stack, text,    i, n, c, instring, escaped, want) {
+            closedat = 0
+            n = length(text)
+            for (i = 1; i <= n; i++) {
+                c = substr(text, i, 1)
+                if (instring) {
+                    if (escaped) escaped = 0
+                    else if (c == "\\") escaped = 1
+                    else if (c == "\"") instring = 0
+                    continue
+                }
+                if (c == "\"") instring = 1
+                else if (c == "{" || c == "[") {
+                    # An object opened inside the array of the top object: an entry in the logs of a failed-only answer.
+                    if (c == "{" && stack == "{[") entries++
+                    stack = stack c
+                }
+                else if (c == "}" || c == "]") {
+                    want = (c == "}") ? "{" : "["
+                    if (substr(stack, length(stack)) != want) stop("a " c " that closes nothing open in the JSON: not the job-log tool JSON")
+                    stack = substr(stack, 1, length(stack) - 1)
+                    if (stack == "") { closedat = i; return stack }
+                }
+            }
+            return stack
         }
         # Prints text up to an unescaped quote, which ends the string. Returns 1 at the end, with what follows the
         # quote in `after`.
@@ -107,27 +154,37 @@ if [ "$first" = "{" ]; then
             printf "%s", text
             return 0
         }
-        # The string ended in piece `last`. What follows it must be only the rest of the tool JSON object (the
-        # message and the line count: no object, and no second logs_content), so two JSON files run together, or
-        # anything else after the first, fail rather than drop what follows.
-        function ended(last,    j, tail) {
+        # The string ended in piece `last`. What follows it is read as JSON structure up to the next logs_content
+        # key, if any (a key: inside a string its quotes would be escaped). The object must close there, with
+        # nothing after it but white space.
+        function ended(last,    j, tail, cut, segment, rest) {
             tail = after
             for (j = last + 1; j <= n; j++) tail = tail "\\" parts[j]
-            sub(/[ \t\r\n]+$/, "", tail)
-            if (index(tail, "logs_content") || index(tail, "{") || substr(tail, length(tail)) != "}") {
-                print "screenshots-from-log: FAIL: something other than the end of the JSON follows its logs_content string (two files run together?)" > "/dev/stderr"
-                exit 3
+            cut = index(tail, key)
+            segment = cut ? substr(tail, 1, cut - 1) : tail
+            skeleton(opens, segment)
+            if (closedat) {
+                rest = substr(tail, closedat + 1)
+                sub(/^[ \t\r\n]+/, "", rest)
+                if (rest != "") stop("something follows the end of the JSON object that holds the logs_content string (two files run together?)")
+                if (shape == "jobs" && entries > 1) stop("the job-log tool JSON holds " entries " entries in its logs, one with no logs_content (a failed-only fetch by run id, with several failed jobs): fetch one job by its job_id, with return_content true")
+                printf "\n"
+                exit 0
             }
-            printf "\n"
-            exit 0
+            if (cut && shape == "jobs") stop("the job-log tool JSON holds the logs of more than one job (a failed-only fetch by run id, with several failed jobs): fetch one job by its job_id, with return_content true")
+            if (cut) stop("a second logs_content string in the same JSON object: not the job-log tool JSON")
+            stop("the JSON object that holds the logs_content string has no end: the JSON is cut")
         }
         END {
             key = "\"logs_content\":\""
             start = index(doc, key)
-            if (!start) {
-                print "screenshots-from-log: FAIL: the file starts with { but has no \"logs_content\" string: not the job-log tool JSON" > "/dev/stderr"
-                exit 3
-            }
+            if (!start) stop("the file starts with { but has no \"logs_content\" string: not the job-log tool JSON")
+            # One job: {"job_id":...,"logs_content":"..."...}. A failed-only fetch by run id:
+            # {"failed_jobs":...,"logs":[{"job_id":...,"job_name":...,"logs_content":"..."...}],...}.
+            opens = skeleton("", substr(doc, 1, start - 1))
+            if (opens == "{") shape = "job"
+            else if (opens == "{[{" && index(doc, "\"logs\":[") && index(doc, "\"logs\":[") < start) shape = "jobs"
+            else stop("the logs_content string is not where the job-log tool JSON puts it")
             n = split(substr(doc, start + length(key)), parts, /\\/)
             if (literal(parts[1])) ended(1)
             plain = 0
@@ -150,15 +207,16 @@ if [ "$first" = "{" ]; then
                     else if (code == 10) printf "\n"
                     else printf "?"
                 } else {
-                    print "screenshots-from-log: FAIL: an escape \\" c " the JSON reader does not know" > "/dev/stderr"
-                    exit 3
+                    stop("an escape \\" c " the JSON reader does not know")
                 }
                 if (literal(rest)) ended(i)
             }
-            print "screenshots-from-log: FAIL: the logs_content string has no end: the JSON is cut" > "/dev/stderr"
-            exit 3
+            stop("the logs_content string has no end: the JSON is cut")
         }
-    ' "$log" > "$work/log.txt" || fail "could not read $log as the job-log tool JSON"
+    ' "$log" > "$work/log.txt" 2> "$work/json.err" || {
+        printable < "$work/json.err" >&2
+        fail "could not read $log as the job-log tool JSON"
+    }
 else
     cp "$log" "$work/log.txt"
 fi
@@ -166,7 +224,7 @@ fi
 # 2. The blocks. Each block's base64 goes to <k>.b64, and a line per block to
 # manifest.tsv: k, name, bytes, sha256, what.
 status=0
-awk -v work="$work" '
+LC_ALL=C awk -v work="$work" '
     function stop(message) {
         print "screenshots-from-log: FAIL: line " NR ": " message > "/dev/stderr"
         failed = 1
@@ -241,7 +299,8 @@ awk -v work="$work" '
             exit 1
         }
     }
-' "$work/log.txt" | printable || status=$?
+' "$work/log.txt" 2> "$work/blocks.err" | printable || status=$?
+printable < "$work/blocks.err" >&2
 [ "$status" -eq 0 ] || exit 1
 
 # 3. Each image: decoded, then checked against its byte count and SHA-256.
@@ -256,15 +315,27 @@ while IFS="$(printf '\t')" read -r k name bytes sha what; do
     [ "$got_sha" = "$sha" ] || fail "$name: SHA-256 $got_sha, but its begin line says $sha: the block is altered"
 done < "$work/manifest.tsv"
 
-mkdir -p "$out"
+# 4. The images, copied into a new folder beside <out dir> (on the same file system, so the last move is a rename)
+# and checked again there, so nothing in between (another image of the same name on a case-insensitive file system,
+# say) can put other bytes under a name. Only when every image has passed does that folder become <out dir>: a
+# failure leaves <out dir> as it was.
+parent=$(dirname "$out")
+mkdir -p "$parent"
+stage="$parent/.$(basename "$out").partial-$$"
+mkdir "$stage" || fail "could not make the folder $stage to copy the images into"
+trap 'rm -rf "$work" "$stage"' EXIT
 count=0
 while IFS="$(printf '\t')" read -r k name bytes sha what; do
-    cp "$work/images/$name" "$out/$name"
-    # Checked again where it lands, so nothing in between (another image of the same name on a case-insensitive
-    # file system, say) can put other bytes under this name.
-    got_sha=$(sha256 < "$out/$name")
-    [ "$got_sha" = "$sha" ] || fail "$out/$name: SHA-256 $got_sha after the copy, not $sha"
-    echo "screenshots-from-log: $out/$name: $bytes bytes, SHA-256 $sha, matches. $what" | printable
+    cp "$work/images/$name" "$stage/$name"
+    got_sha=$(sha256 < "$stage/$name")
+    [ "$got_sha" = "$sha" ] || fail "$name: SHA-256 $got_sha after the copy, not $sha; $out is left as it was"
     count=$((count + 1))
+done < "$work/manifest.tsv"
+if [ -d "$out" ]; then
+    rmdir "$out" || fail "could not replace the empty folder $out"
+fi
+mv "$stage" "$out" || fail "could not move $stage to $out"
+while IFS="$(printf '\t')" read -r k name bytes sha what; do
+    echo "screenshots-from-log: $out/$name: $bytes bytes, SHA-256 $sha, matches. $what" | printable
 done < "$work/manifest.tsv"
 echo "screenshots-from-log: OK: $count images, each matching the byte count and SHA-256 printed with it"

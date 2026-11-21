@@ -10,15 +10,25 @@
 # that the built extension loads no SwiftUI and no networking
 # framework (what these checks cannot see is in scripts/extension-guard.sh),
 # runs the unit tests, takes screenshots of our keyboard in the simulator,
-# types through the keyboard extension there with UI tests (KEY-62), and
-# prepares the screenshots that the screenshots jobs print into their job logs
-# as text (KEY-68).
+# types through the keyboard extension there with UI tests (KEY-62), takes
+# reference captures of Apple's own keyboard in ten states before Speakboard is
+# enabled (KEY-9), and prepares the screenshots and captures that the
+# screenshots jobs print into their job logs as text (KEY-68).
 name: macos
 
 on:
   push:
     # No pull_request trigger, as in linux.yml: the push run already shows on the pull request.
     branches: [feature/sharp-einstein-aydugs, main]
+  # A run started by hand (KEY-9): with captures true (the default), it takes the reference captures of Apple's
+  # keyboard whatever changed. A push takes them only when it, or (on a branch other than main) the branch since
+  # main, changes a file they depend on: see scripts/captures-needed.sh.
+  workflow_dispatch:
+    inputs:
+      captures:
+        description: Take the reference captures of Apple's keyboard (KEY-9)
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -42,14 +52,36 @@ env:
 jobs:
   apple:
     runs-on: xcode-27
-    timeout-minutes: 60
+    # The simulator step has its own 40-minute limit (below). The job's other steps took at most about 16 minutes on
+    # the runs of KEY-9 (make check-native 5, the build 1, the unit tests up to 8, the rest 2), so 75 leaves room.
+    timeout-minutes: 75
     outputs:
       # The prepared screenshots' artifact id, set only when they were uploaded: the screenshots jobs run on it.
       screenshots-artifact: ${{ steps.upload-log-images.outputs.artifact-id }}
+      # The screenshots jobs' groups, a JSON array from the prepare step's groups.txt (KEY-9): one job per group.
+      print-groups: ${{ steps.log-images.outputs.groups }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # The whole history, so scripts/captures-needed.sh can see what a push changed.
+          fetch-depth: 0
+
+      # KEY-9: whether this run takes the reference captures of Apple's keyboard, and why, in one line.
+      - name: Does this run take the reference captures of Apple's keyboard?
+        id: captures
+        env:
+          EVENT: ${{ github.event_name }}
+          CAPTURES_INPUT: ${{ inputs.captures }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          # On a branch other than main the decision also compares the head with its merge base with origin/main.
+          echo "speakboard-captures: origin/main in this clone: $(git rev-parse --verify --quiet origin/main || echo none)"
+          scripts/captures-needed.sh "$EVENT" "$CAPTURES_INPUT" "$BEFORE" "$HEAD_SHA" "$BRANCH" > "$RUNNER_TEMP/captures.txt"
+          cat "$RUNNER_TEMP/captures.txt" >> "$GITHUB_OUTPUT"
+          echo "speakboard-captures: $(tr '\n' ' ' < "$RUNNER_TEMP/captures.txt")"
 
       - name: Select Xcode
         run: sudo xcode-select -s "$XCODE_APP/Contents/Developer"
@@ -116,10 +148,28 @@ jobs:
             -destination "platform=iOS Simulator,name=$SIM_DEVICE,OS=27.2" \
             -derivedDataPath "$DERIVED_DATA" test 2>&1 | tee "$OUT/xcodebuild-test.log" \
             | grep -E '(error|warning):|Test run with|✘|TEST (SUCCEEDED|FAILED)' || true
-          grep -q '\*\* TEST SUCCEEDED \*\*' "$OUT/xcodebuild-test.log"
+          # KEY-9: the filter above shows a passing run; a failing one needs more, and the artifact cannot be read
+          # from a session (KEY-54). So on a failure, a bounded excerpt of the full log: the lines that name a
+          # failure, with three lines around each (at most 150 lines), then the log's last 60 lines.
+          log="$OUT/xcodebuild-test.log"
+          if ! grep -q '\*\* TEST SUCCEEDED \*\*' "$log"; then
+            echo "== the unit tests failed; $log has $(wc -l < "$log" | tr -d ' ') lines"
+            echo "== its lines that name a failure, with three lines around each (at most 150 lines):"
+            grep -n -B 3 -A 3 -E 'error|[Ff]ail|✘|[Tt]imed out|[Cc]rash|[Cc]ancel|[Uu]nable to|[Cc]ould not|[Ee]xception' "$log" \
+              | head -n 150 || true
+            echo "== its last 60 lines:"
+            tail -n 60 "$log"
+            exit 1
+          fi
 
       - name: The keyboard in the simulator, screenshots and the typing proof
         id: sim
+        # Its own limit (KEY-9): the slowest run with captures took 32.5 minutes here (503073b). A slow run then
+        # fails this step inside the job's 75 minutes, and the steps after it (prepare, upload) still run.
+        timeout-minutes: 40
+        env:
+          SPEAKBOARD_CAPTURES: ${{ steps.captures.outputs.captures }}
+          SPEAKBOARD_CAPTURES_WHY: ${{ steps.captures.outputs.why }}
         run: |
           scripts/sim-keyboard.sh "$DERIVED_DATA/Build/Products/Debug-iphonesimulator/Speakboard.app" \
             "$SIM_DEVICE" "$SIM_RUNTIME" "$OUT/screenshots" "$DERIVED_DATA"
@@ -128,11 +178,31 @@ jobs:
       - name: Prepare the screenshots for the screenshots jobs
         id: prepare
         if: always() && steps.sim.outcome != 'skipped'
+        env:
+          SPEAKBOARD_CAPTURES: ${{ steps.captures.outputs.captures }}
+          SPEAKBOARD_CAPTURES_WHY: ${{ steps.captures.outputs.why }}
         run: scripts/screenshots-to-log.sh prepare "$OUT/screenshots" "$OUT/log-images"
+
+      # KEY-69: only when at least one image was made. A simulator step that fails early leaves a folder with only
+      # what.tsv and none.txt, and printing that would only add red jobs with no image.
+      - name: Count the prepared screenshots
+        id: log-images
+        if: always() && steps.prepare.outcome != 'skipped'
+        run: |
+          count=0
+          if [ -d "$OUT/log-images" ]; then
+            count=$(find "$OUT/log-images" -maxdepth 1 -type f \( -name '*.png' -o -name '*.jpg' \) | wc -l | tr -d ' ')
+          fi
+          echo "speakboard-screenshots: $count prepared images"
+          if [ "$count" -gt 0 ]; then echo "any=true" >> "$GITHUB_OUTPUT"; else echo "any=false" >> "$GITHUB_OUTPUT"; fi
+          if groups=$(scripts/screenshots-to-log.sh groups "$OUT/log-images"); then
+            echo "speakboard-screenshots: the screenshots jobs' groups: $groups"
+            echo "groups=$groups" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload the prepared screenshots
         id: upload-log-images
-        if: always() && steps.prepare.outcome != 'skipped'
+        if: always() && steps.log-images.outputs.any == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: screenshots-for-logs
@@ -145,9 +215,27 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: macos-screenshots-and-logs
-          path: .build/ci-out
+          # Not the UI tests' result bundles (KEY-9): with two more UI test runs, and a failure's diagnostics, they
+          # made this artifact 145 MB in 4,076 files (run 44787518860). Their logs and exported attachments stay.
+          path: |
+            .build/ci-out
+            !.build/ci-out/**/*.xcresult
+            !.build/ci-out/**/*.xcresult/**
           if-no-files-found: error
           retention-days: 30
+
+      # KEY-69: the screenshots jobs run on the upload's artifact-id. If it ever came back empty after an upload that
+      # succeeded (a renamed step id, a change in the action), they would all be skipped and a green run would carry
+      # no screenshots without anyone seeing it; this makes that red.
+      # KEY-9: the same for the groups the screenshots jobs' matrix is made from.
+      - name: The prepared screenshots' artifact has an id
+        if: >-
+          always() && steps.upload-log-images.outcome == 'success'
+          && (steps.upload-log-images.outputs.artifact-id == '' || steps.log-images.outputs.groups == '')
+        run: |
+          echo "the upload of the prepared screenshots succeeded, but gave no artifact-id or there are no groups:" \
+            "the screenshots jobs would be skipped" >&2
+          exit 1
 
   # KEY-68: the screenshots as text in job logs an agent can read whole. Agents cannot download artifacts (KEY-54),
   # and GitHub's job-log tool returns at most the last 5,000 lines of a job's log, so each group of images is
@@ -159,15 +247,23 @@ jobs:
   screenshots:
     name: screenshots (${{ matrix.group }})
     needs: apple
-    # Only when the apple job uploaded the prepared screenshots, whatever its own result: an apple job that fails
-    # before then (or is cancelled) leaves no artifact, and these jobs would only add failures that say nothing.
-    if: always() && needs.apple.outputs.screenshots-artifact != ''
+    # Only when the apple job uploaded the prepared screenshots (at least one image), whether it then passed or
+    # failed, the simulator step's own 40-minute timeout included (a step that times out fails, and the prepare and
+    # upload steps after it still run): an apple job that fails before then leaves no artifact, and these jobs would
+    # only add failures that say nothing. Not in a cancelled run (KEY-69): its prepare and upload steps still run,
+    # as always() steps do on a cancel, but nobody is waiting for the images. In this job's condition, cancelled() is
+    # true only when the run was cancelled, not when the apple job failed. What happens on the job's own timeout is
+    # not shown.
+    if: ${{ !cancelled() && needs.apple.outputs.screenshots-artifact != '' && needs.apple.outputs.print-groups != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        group: [keyboard-light, keyboard-dark, ui-light, ui-dark]
+        # From the apple job (KEY-9): of keyboard-light, keyboard-dark, ui-light, ui-dark, manifest and one group per
+        # capture of Apple's keyboard (or per band of one cut into bands), those whose images were all made. The
+        # fallback is never used when the job runs.
+        group: ${{ fromJSON(needs.apple.outputs.print-groups || '["none"]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -180,4 +276,6 @@ jobs:
           path: log-images
 
       - name: Print the screenshots into the job log
-        run: scripts/screenshots-to-log.sh print log-images "${{ matrix.group }}"
+        env:
+          GROUP: ${{ matrix.group }}
+        run: scripts/screenshots-to-log.sh print log-images "$GROUP"

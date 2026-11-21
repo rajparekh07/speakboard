@@ -28,6 +28,26 @@
 #             Apple's keyboard, when the UI test found it up before it switched
 #             to Speakboard, as the others. When a run has not got it, a line
 #             in none.txt says so; that is not a failure.
+#         apple-<state>-<appearance>.png (unless SPEAKBOARD_CAPTURES is set
+#         to anything but true: then none, and no manifest lines; see
+#         scripts/captures-needed.sh), for each state letters-upper,
+#         letters-lower, caps-lock, numbers and symbols, and each appearance
+#             the reference captures of Apple's keyboard (KEY-9), from
+#             AppleKeyboardCapturesUITests' attachments in apple-<appearance>/
+#             and its speakboard-apple-capture lines in apple-<appearance>.log,
+#             cropped the same way at full resolution, lossless PNG. Each one's
+#             what text says the simulator, device, iOS version, appearance,
+#             state, crop rows, scale and keyboard frame. One that would take
+#             more lines than a printing job's budget is cut instead into the
+#             fewest bands of rows that each fit one job,
+#             apple-<state>-<appearance>-<k>-of-<n>.png, top to bottom, each
+#             lossless, each printed by its own job.
+#         manifest.txt, a `speakboard-capture` line per capture of Apple's
+#             keyboard: name, state, appearance, iOS version, model, pixel
+#             size, crop rows, screen size, scale, keyboard frame, bytes,
+#             SHA-256, the group that prints it, and the simulator's device
+#         groups.txt, the printing jobs' groups, a line each (see print):
+#             only those whose images were all made
 #         what.tsv, a line per image: its name, a tab, and what it is
 #         none.txt, a `speakboard-screenshot none` line per image not made
 #       The keyboard region is the bottom 2/5 of the screen, full width: on the
@@ -46,8 +66,17 @@
 #         ui-light         shift-auto, shift-off, shift-on, caps-lock and
 #                          apple-keyboard, -light.jpg
 #         ui-dark          the same, -dark.jpg
+#         manifest         manifest.txt, as plain lines (KEY-9)
+#         apple-<state>-<appearance>[-<k>-of-<n>]
+#                          that capture of Apple's keyboard, or a band of it
+#                          (KEY-9)
 #       It fails, printing no block, if the blocks would take more than
-#       <budget> lines, or if an image other than Apple's is missing.
+#       <budget> lines, or if an image other than the UI test's
+#       apple-keyboard-<appearance>.jpg is missing.
+#
+#   scripts/screenshots-to-log.sh groups <prepared dir>
+#       Any platform. Prints groups.txt as a JSON array, for the workflow's
+#       matrix of printing jobs.
 #
 #       The one hard limit is the job-log tool's: it returns at most the last
 #       5,000 lines of a job's log. The budget, 4,600 printed lines a group by
@@ -56,13 +85,13 @@
 #       of them printed), so a group at its budget gives a log of about 4,811
 #       lines: a margin of about 190 lines for those lines to grow.
 #
-#       If the full-resolution crop outgrows one job (a busier backdrop, such
+#       If a full-resolution crop outgrows one job (a busier backdrop, such
 #       as a translucent one with the app blurred through it, makes a bigger
-#       PNG), split it over two jobs rather than lose pixels: have `prepare`
-#       cut the crop into its top and bottom halves at a row between key rows,
-#       as keyboard-<appearance>-top.png and -bottom.png, each lossless; give
-#       each half its own group and matrix entry (keyboard-light-top and so
-#       on); and say in the docs that the halves are one image. Not built.
+#       PNG), it is split over jobs rather than losing pixels: `prepare` does
+#       so for the captures of Apple's keyboard (KEY-9), cutting the crop into
+#       bands of rows, and the workflow's matrix takes its groups from
+#       groups.txt. Our keyboard's keyboard-<appearance>.png is not split: it
+#       fails its group's budget instead.
 #
 #   scripts/screenshots-to-log.sh emit <name> <file> <what>
 #       Prints one file as one block. Any platform.
@@ -84,6 +113,9 @@ fail() {
     echo "screenshots-to-log: FAIL: $1" >&2
     exit 1
 }
+
+# A printing job's budget of printed lines (see print, below).
+default_budget=4600
 
 sha256() {
     if command -v sha256sum > /dev/null 2>&1; then
@@ -173,7 +205,7 @@ attachment() {
 }
 
 prepare() {
-    local dir="$1" out="$2" missing=0 appearance state source name
+    local dir="$1" out="$2" missing=0 appearance state source name ours
     [ "$(uname -s)" = Darwin ] || fail "prepare needs macOS (ImageIO, sips, plutil); print and emit work anywhere"
     command -v sips > /dev/null 2>&1 || fail "sips is not available"
     command -v plutil > /dev/null 2>&1 || fail "plutil is not available"
@@ -181,6 +213,13 @@ prepare() {
     mkdir -p "$out"
     : > "$out/what.tsv"
     : > "$out/none.txt"
+    : > "$out/checks-failed.txt"
+    # The printing jobs' groups, one per line (KEY-9): only groups whose images were all made, so a run that
+    # fails part way gives its one real failure and the images that exist, not a red job per missing image. Empty
+    # until the end, so a prepare that stops on a tool failure names none.
+    budget=$default_budget
+    groups=""
+    : > "$out/groups.txt"
     work=$(mktemp -d)
     trap 'rm -rf "$work"' EXIT
     tool="$work/screenshot-image"
@@ -235,13 +274,231 @@ prepare() {
             fi
         done
     done
+    if [ "${SPEAKBOARD_CAPTURES:-true}" = true ]; then
+        apple_captures
+    else
+        : > "$out/manifest.txt"
+        echo "speakboard-screenshots: this run has no reference captures of Apple's keyboard:" \
+            "${SPEAKBOARD_CAPTURES_WHY:-SPEAKBOARD_CAPTURES is $SPEAKBOARD_CAPTURES}"
+    fi
+    ours=""
+    for name in keyboard-light keyboard-dark; do
+        [ -f "$out/$name.png" ] && ours="$ours $name"
+    done
+    for appearance in light dark; do
+        name=ui-$appearance
+        for state in shift-auto shift-off shift-on caps-lock; do
+            [ -f "$out/$state-$appearance.jpg" ] || name=""
+        done
+        ours="$ours $name"
+    done
+    [ -s "$out/manifest.txt" ] && ours="$ours manifest"
+    printf '%s\n' $ours $groups > "$out/groups.txt"
+    echo "speakboard-screenshots: the screenshots jobs' groups, those whose images were all made:" $ours $groups
+    if [ -s "$out/checks-failed.txt" ]; then
+        cat "$out/checks-failed.txt"
+    fi
     [ "$missing" -eq 0 ] || fail "$missing screenshots that should be there are missing (see the none lines above)"
+    [ ! -s "$out/checks-failed.txt" ] \
+        || fail "$(wc -l < "$out/checks-failed.txt" | tr -d ' ') checks of the captures failed (the FAIL check lines above); their images are printed, to be looked at"
     echo "speakboard-screenshots: prepared in $out; the screenshots jobs print them"
+}
+
+# block_lines <bytes>: the lines emit prints for a file of <bytes> bytes: begin, base64 at 76 a line, end, printed.
+block_lines() {
+    echo $(((4 * (($1 + 2) / 3) + 75) / 76 + 3))
+}
+
+# facts_value <facts line> <key>: a value from a test's speakboard-apple-capture line, with only the characters a
+# block's what text allows.
+facts_value() {
+    printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -n 1 | tr -cd 'A-Za-z0-9,.:;()/+=-'
+}
+
+# facts_device <facts line>: the device, the line's last value, which may hold spaces.
+facts_device() {
+    printf '%s' "${1##* device=}" | tr -cd 'A-Za-z0-9 ,.:;()/+=-'
+}
+
+# describe <facts line> <crop note> <capture name> <part file> <scale>: the what text of a capture of Apple's
+# keyboard, or of a band of one. Any platform: the self-test runs it, and prints and recovers a block with it, so a
+# character the block refuses fails make check, not a macOS run.
+describe() {
+    local facts="$1" note="$2" name="$3" part="$4" scale="$5" phrase behind band what
+    case "$(facts_value "$facts" state)" in
+        letters-upper) phrase="letters, upper case (automatic Shift in the empty field)" ;;
+        letters-lower) phrase="letters, lower case (Shift off)" ;;
+        caps-lock) phrase="letters, caps lock" ;;
+        numbers) phrase="the numbers and punctuation plane (after 123)" ;;
+        symbols) phrase="the symbols plane (after the symbols key in the numbers plane)" ;;
+        *) fail "the facts line of $name names no state this script knows" ;;
+    esac
+    case "$(facts_value "$facts" behind)" in
+        plain-system-background) behind="only the plain system background of the app" ;;
+        *) behind="the screen of the app" ;;
+    esac
+    what="Apple keyboard reference capture from a simulator, $(facts_device "$facts") ($(facts_value "$facts" model)),"
+    what="$what iOS $(facts_value "$facts" ios), $(facts_value "$facts" appearance) appearance, $phrase; crop of $note;"
+    what="$what scale $scale (screen $(facts_value "$facts" window) pt); keyboard frame"
+    what="$what $(facts_value "$facts" keyboard) pt (x,y,width,height); the field holds: $(facts_value "$facts" field);"
+    what="$what behind the keyboard: $behind; full resolution, lossless PNG; CI run $(run_id), commit $(commit_sha)"
+    case "$part" in
+        *-of-*.png)
+            band=${part%.png}
+            what="$what; band ${band#"$name"-} of $name, the bands stacked in order are one image"
+            ;;
+    esac
+    # The block allows only these characters (see emit). Refused here, prepare fails on the Mac, rather than every
+    # printing job afterwards (KEY-9 review round 1, finding 7).
+    case "$what" in
+        *[!A-Za-z0-9\ ,.:\;\(\)/+=x-]*) fail "the description of $part has a character the block does not allow: $what" ;;
+    esac
+    printf '%s\n' "$what"
+}
+
+# run_id, commit_sha: the CI run and the commit a capture was made in, from the workflow's environment (GITHUB_RUN_ID,
+# GITHUB_SHA), or "none" outside CI. A measured design token cites the run id, the capture's name and its SHA-256.
+run_id() {
+    printf '%s' "${GITHUB_RUN_ID:-none}" | tr -cd '0-9a-z'
+}
+commit_sha() {
+    printf '%s' "${GITHUB_SHA:-none}" | tr -cd '0-9a-z'
+}
+
+# soft_check <out dir> <capture names> <message> <command...>: runs a check (review round 2, finding 4). When it does
+# not exit 0, it prints a line, and records one per capture it concerns in <out dir>/checks-failed.txt, and returns 0:
+# prepare goes on, writes the groups of every image made (the failing capture's included, so it can be seen; its
+# printing job prints that line), and fails at its end, naming each failed check.
+soft_check() {
+    local dir="$1" names="$2" message="$3" code=0 name
+    shift 3
+    "$@" || code=$?
+    [ "$code" = 0 ] && return 0
+    echo "speakboard-screenshots: FAIL: a check failed (exit $code): $message"
+    for name in $names; do
+        printf '%s\n' "speakboard-screenshots: FAIL check: $name: $message (exit $code)" >> "$dir/checks-failed.txt"
+    done
+}
+
+# expect_check <0|3> <failure message> <image tool check arguments...>: runs a check of scripts/screenshot-image.swift
+# (it exits 0 when the check holds, 3 when it does not, 1 on an error) and fails unless it exits <0|3>.
+expect_check() {
+    local want="$1" message="$2" code=0
+    shift 2
+    "$tool" "$@" || code=$?
+    [ "$code" = "$want" ] || fail "$message (the image tool exited $code, not $want)"
+}
+
+# apple_captures: the reference captures of Apple's keyboard (KEY-9), from $dir/apple-<appearance>/ (the UI test's
+# exported attachments) and the facts in $dir/apple-<appearance>.log, into $out, each with its own group, and a line
+# each in $out/manifest.txt. Uses prepare's dir, out, tool, missing and groups.
+apple_captures() {
+    local appearance state name source log facts window width height scale
+    local points_wide points_high bytes sha top count pieces fits band parts part first rows what checks bottom crop names
+    : > "$out/manifest.txt"
+    for appearance in light dark; do
+        log="$dir/apple-$appearance.log"
+        checks=""
+        names=""
+        for state in letters-upper letters-lower caps-lock numbers symbols; do
+            name="apple-$state-$appearance"
+            source=$(attachment "$dir/apple-$appearance" "$name")
+            facts=$(grep -o "speakboard-apple-capture name=$name\\.png .*" "$log" 2> /dev/null | tail -n 1 || true)
+            if [ -z "$source" ] || [ ! -f "$source" ] || [ -z "$facts" ]; then
+                none "$name.png" "no capture $name: no attachment in $dir/apple-$appearance, or no facts line in $log"
+                missing=$((missing + 1))
+                continue
+            fi
+            window=$(facts_value "$facts" window)
+            width=$(pixels "$source" pixelWidth)
+            height=$(pixels "$source" pixelHeight)
+            points_wide=${window%x*}
+            points_high=${window#*x}
+            case "$points_wide$points_high" in
+                '' | *[!0-9]*) fail "$name: the window size \"$window\" in its facts line is not <width>x<height>" ;;
+            esac
+            scale=$((width / points_wide))
+            [ "$((scale * points_wide))" = "$width" ] && [ "$((scale * points_high))" = "$height" ] \
+                || fail "$name: $width x $height pixels is not a whole multiple of the window, $window pt"
+            shape "$source" "$out/$name.png" png 1
+            # The panel's top edge is inside the crop: its first rows are one colour, the background above the
+            # panel (review round 1, finding 2).
+            cp "$out/$name.png" "$work/check-$name.png"
+            soft_check "$out" "$name" "the top 10 rows of its crop are not one colour, so the top edge of the panel may be outside the crop" \
+                "$tool" uniform "$work/check-$name.png" 0 10
+            checks="$checks $work/check-$name.png"
+            names="$names $name"
+            bottom=$(printf '%s\n' "$(facts_value "$facts" keyboard)" \
+                | awk -F, -v scale="$scale" -v top="$((height - height * 2 / 5))" '{ printf "%d", ($2 + $4) * scale - top }')
+            crop=$((height * 2 / 5))
+            bytes=$(wc -c < "$out/$name.png" | tr -d ' ')
+            if [ "$(block_lines "$bytes")" -le "$budget" ]; then
+                parts="$name.png"
+                printf '%s\n' "$note" > "$work/$name.png.note"
+            else
+                # Too big for one printing job: cut into the fewest bands of rows, 2 or more, that each fit one
+                # job, each lossless, each its own group. Bands differ in size (the blurred app above the keys
+                # makes a busier PNG), so each cut is measured and the count raised until every band fits.
+                echo "speakboard-screenshots: $name.png ($bytes bytes) is over one job's $budget lines: cutting it"
+                rm -f "$out/$name.png"
+                count=$((height * 2 / 5))
+                top=$((height - count))
+                pieces=2
+                while :; do
+                    [ "$pieces" -le 12 ] || fail "$name: even 12 bands are each over one job's $budget lines"
+                    parts=""
+                    fits=1
+                    part=1
+                    while [ "$part" -le "$pieces" ]; do
+                        first=$((top + count * (part - 1) / pieces))
+                        rows=$((top + count * part / pieces - first))
+                        band="$name-$part-of-$pieces.png"
+                        "$tool" rows "$source" "$out/$band" "$first" "$rows" > "$work/$band.note" \
+                            || fail "could not cut rows $first to $((first + rows - 1)) of $source"
+                        parts="$parts $band"
+                        [ "$(block_lines "$(wc -c < "$out/$band" | tr -d ' ')")" -le "$budget" ] || fits=0
+                        part=$((part + 1))
+                    done
+                    [ "$fits" = 1 ] && break
+                    for band in $parts; do rm -f "$out/$band" "$work/$band.note"; done
+                    pieces=$((pieces + 1))
+                done
+                echo "speakboard-screenshots: $name.png cut into $pieces bands of rows, top to bottom:$parts"
+            fi
+            for part in $parts; do
+                note=$(cat "$work/$part.note")
+                what=$(describe "$facts" "$note" "$name" "$part" "$scale")
+                made "$part" "$what"
+                rows=$(printf '%s\n' "$note" | sed -n 's/^rows \([0-9]*\) to \([0-9]*\) of.*/\1-\2/p')
+                bytes=$(wc -c < "$out/$part" | tr -d ' ')
+                sha=$(sha256 < "$out/$part")
+                first=${part%.png}
+                groups="$groups $first"
+                printf '%s\n' "speakboard-capture name=$part state=$state appearance=$appearance ios=$(facts_value "$facts" ios) model=$(facts_value "$facts" model) pixels=$(pixels "$out/$part" pixelWidth)x$(pixels "$out/$part" pixelHeight) rows=$rows screen=${width}x$height scale=$scale keyboard=$(facts_value "$facts" keyboard) field=$(facts_value "$facts" field) behind=$(facts_value "$facts" behind) bytes=$bytes sha256=$sha group=$first run=$(run_id) commit=$(commit_sha) simulator device=$(facts_device "$facts")" \
+                    >> "$out/manifest.txt"
+            done
+        done
+        # Within one appearance, the background above the panel and the strip below the keys are the same in all
+        # five captures, which a transient (a card, a panel still settling) would break. Each check is first shown
+        # able to fail, on images it must refuse.
+        set -- $checks
+        if [ "$#" -eq 5 ]; then
+            expect_check 3 "the one-colour check passed a whole crop, keys and all: it cannot fail" uniform "$1" 0 "$crop"
+            expect_check 3 "the sameness check passed letters upper case against numbers: it cannot fail" \
+                same 0 "$crop" "$1" "$4"
+            soft_check "$out" "$names" "$appearance: the background above the panel differs between the captures" \
+                "$tool" same 0 10 "$@"
+            soft_check "$out" "$names" "$appearance: the strip below the keys (crop rows $bottom on) differs between the captures" \
+                "$tool" same "$bottom" "$((crop - bottom))" "$@"
+        fi
+    done
+    echo "speakboard-screenshots: the manifest of the captures of Apple's keyboard ($(wc -l < "$out/manifest.txt" | tr -d ' ') images):"
+    cat "$out/manifest.txt"
 }
 
 # print_group <prepared dir> <group> <budget>
 print_group() {
-    local dir="$1" group="$2" budget="$3" names name what line rest missing=0 count=0 lines chars
+    local dir="$1" group="$2" budget="$3" names name what line rest missing=0 count=0 lines chars capture
     case "$group" in
         keyboard-light) names="keyboard-light.png" ;;
         keyboard-dark) names="keyboard-dark.png" ;;
@@ -251,7 +508,29 @@ print_group() {
                 names="$names $name-${group#ui-}.jpg"
             done
             ;;
-        *) fail "no group $group (keyboard-light, keyboard-dark, ui-light, ui-dark)" ;;
+        manifest)
+            [ -f "$dir/manifest.txt" ] || fail "no manifest.txt in $dir: is it a folder the prepare step made?"
+            lines=$(wc -l < "$dir/manifest.txt" | tr -d ' ')
+            [ "$lines" -le "$budget" ] || fail "the manifest has $lines lines, over the budget of $budget"
+            echo "speakboard-screenshots: the manifest of the captures of Apple's keyboard (KEY-9), a line per image:"
+            cat "$dir/manifest.txt"
+            echo "speakboard-screenshots: group manifest: $lines lines"
+            [ "$lines" -gt 0 ] || fail "the manifest is empty: no capture of Apple's keyboard was made"
+            return 0
+            ;;
+        apple-*)
+            # KEY-9: a capture of Apple's keyboard, or a band of one, alone in its group.
+            case "$group" in
+                *[!a-z0-9-]*) fail "no group $group" ;;
+            esac
+            names="$group.png"
+            # A check of this capture that failed in prepare (review round 2, finding 4): said here, above the image.
+            capture=$(printf '%s\n' "$group" | sed 's/-[0-9]*-of-[0-9]*$//')
+            if [ -f "$dir/checks-failed.txt" ]; then
+                grep -F "speakboard-screenshots: FAIL check: $capture: " "$dir/checks-failed.txt" || true
+            fi
+            ;;
+        *) fail "no group $group (keyboard-light, keyboard-dark, ui-light, ui-dark, manifest, apple-...)" ;;
     esac
     case "$budget" in
         '' | *[!0-9]*) fail "the budget must be a number of lines, not \"$budget\"" ;;
@@ -289,6 +568,19 @@ print_group() {
     [ "$missing" -eq 0 ] || fail "$missing screenshots that should be there are missing (see the none lines above)"
 }
 
+# groups_json <prepared dir>: the printing jobs' groups from groups.txt, as a JSON array for the workflow's matrix.
+groups_json() {
+    local dir="$1" group json=""
+    [ -s "$dir/groups.txt" ] || fail "no groups.txt in $dir: is it a folder the prepare step made?"
+    while read -r group; do
+        case "$group" in
+            '' | *[!A-Za-z0-9-]*) fail "a group name groups.txt should not have: \"$group\"" ;;
+        esac
+        json="$json${json:+,}\"$group\""
+    done < "$dir/groups.txt"
+    printf '[%s]\n' "$json"
+}
+
 case "${1:-}" in
     emit)
         [ "$#" -eq 4 ] || fail "usage: $0 emit <name> <file> <what>"
@@ -300,10 +592,24 @@ case "${1:-}" in
         ;;
     print)
         [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || fail "usage: $0 print <prepared dir> <group> [<budget lines>]"
-        print_group "$2" "$3" "${4:-4600}"
+        print_group "$2" "$3" "${4:-$default_budget}"
+        ;;
+    check-recording)
+        # For the self-test: soft_check with a stand-in command for the image tool.
+        [ "$#" -ge 5 ] || fail "usage: $0 check-recording <out dir> <capture names> <message> <command...>"
+        shift
+        soft_check "$@"
+        ;;
+    describe)
+        [ "$#" -eq 6 ] || fail "usage: $0 describe <facts line> <crop note> <capture name> <part file> <scale>"
+        describe "$2" "$3" "$4" "$5" "$6"
+        ;;
+    groups)
+        [ "$#" -eq 2 ] || fail "usage: $0 groups <prepared dir>"
+        groups_json "$2"
         ;;
     *)
-        echo "usage: $0 prepare <screenshots dir> <out dir> | print <prepared dir> <group> [<budget>] | emit <name> <file> <what>" >&2
+        echo "usage: $0 prepare <screenshots dir> <out dir> | print <prepared dir> <group> [<budget>] | groups <prepared dir> | emit <name> <file> <what>" >&2
         exit 2
         ;;
 esac

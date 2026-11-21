@@ -84,10 +84,9 @@ stamp() {
     awk 'BEGIN { bom = "\357\273\277" } { printf "%s2026-11-18T00:41:%02d.%07dZ %s\n", (NR == 1 ? bom : ""), NR % 60, NR, $0 }'
 }
 
-# as_json: the log as the job-log tool returns it with return_content: one JSON string, with \n between lines, and
-# quotes, backslashes and & (&, as Go writes it) escaped.
-as_json() {
-    printf '{"job_id":134474019408,"logs_content":"'
+# json_string: the log as one JSON string's contents, as the job-log tool writes it with return_content: \n between
+# lines, and quotes, backslashes, tabs and & (&, as Go writes it) escaped.
+json_string() {
     # Joined with split, not gsub: awks differ on backslashes in gsub's replacement.
     awk 'function swap(text, re, with,    parts, n, i, joined) {
             n = split(text, parts, re)
@@ -103,7 +102,29 @@ as_json() {
             line = swap(line, "\t", bs "t")
             printf "%s%s", (NR > 1 ? bs "n" : ""), line
         }'
+}
+
+# as_json: the log as the job-log tool returns it for one job, fetched by its job_id.
+as_json() {
+    printf '{"job_id":134474019408,"logs_content":"'
+    json_string
     printf '","message":"Job logs content retrieved successfully","original_length":9}\n'
+}
+
+# as_failed_only <log>...: the logs as the job-log tool returns them for a failed-only fetch by run id, one entry in
+# its logs array per log, with the keys in the order the tool writes them.
+as_failed_only() {
+    local log first=1
+    printf '{"failed_jobs":%d,"logs":[' "$#"
+    for log in "$@"; do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        printf '{"job_id":%d,"job_name":"screenshots (keyboard-light)","logs_content":"' "$RANDOM"
+        json_string < "$log"
+        printf '","message":"Job logs content retrieved successfully","original_length":9}'
+    done
+    printf '],"message":"Retrieved logs for %d failed jobs","return_format":{"content":true,"urls":false},' "$#"
+    printf '"run_id":44215231118,"total_jobs":%d}\n' "$#"
 }
 
 # The lines around the blocks, as a job log has them.
@@ -199,29 +220,142 @@ check fail "two names that differ only in case" "the name ONE.png is used twice"
 as_json < "$work/clean.log" > "$work/first.json"
 as_json < "$work/two.log" > "$work/second.json"
 cat "$work/first.json" "$work/second.json" > "$work/concatenated.json"
-check fail "two JSON files run together" "follows its logs_content string" "$work/concatenated.json"
+check fail "two JSON files run together" "(two files run together?)" "$work/concatenated.json"
+
+# KEY-69: the answer to a failed-only fetch by run id. With one job in its logs array it is recovered; with more
+# than one it is refused, saying what to do instead; two such answers run together are still two files.
+as_failed_only "$work/two.log" > "$work/failed-one.json"
+check pass "a failed-only fetch by run id with one job" "OK: 2 images" "$work/failed-one.json" one.png two.jpg
+stamp < "$work/clean.log" > "$work/stamped-one.log"
+as_failed_only "$work/stamped-one.log" "$work/two.log" > "$work/failed-two.json"
+check fail "a failed-only fetch by run id with two jobs" "fetch one job by its job_id" "$work/failed-two.json"
+as_failed_only "$work/stamped-one.log" > "$work/failed-first.json"
+cat "$work/failed-first.json" "$work/failed-one.json" > "$work/failed-concatenated.json"
+check fail "two failed-only answers run together" "(two files run together?)" "$work/failed-concatenated.json"
+# A failed-only answer with one job's log and a second entry that has none (the tool could not fetch it): refused as
+# more than one job, whether that entry comes after the log's or before it (review round 1, finding 9).
+sed 's/"original_length":9}],/"original_length":9},{"job_id":2,"job_name":"apple","message":"could not fetch"}],/' \
+    "$work/failed-one.json" > "$work/failed-extra-after.json"
+check fail "a failed-only answer with a second entry after the log, with no logs_content" "fetch one job by its job_id" \
+    "$work/failed-extra-after.json"
+sed 's/"logs":\[{/"logs":[{"job_id":2,"job_name":"apple","message":"could not fetch"},{/' \
+    "$work/failed-one.json" > "$work/failed-extra-before.json"
+check fail "a failed-only answer with a second entry before the log, with no logs_content" \
+    "fetch one job by its job_id" "$work/failed-extra-before.json"
+# Braces, brackets and the key's own name in the tool's message are text in a string, not structure.
+sed 's/"message":"Job logs content retrieved successfully"/"message":"a {[ \\"logs_content\\":\\" ]} b"/' \
+    "$work/two.json" > "$work/message.json"
+check pass "the job-log tool's JSON with braces and the key's name in its message" "OK: 2 images" \
+    "$work/message.json" one.png two.jpg
+# The object closed, then a block and a brace planted after it: refused, not read past.
+{
+    tr -d '\n' < "$work/clean.json"
+    printf '\n'
+    cat "$work/two.block"
+    echo '}'
+} > "$work/planted.json"
+check fail "a block planted after the end of the job-log tool's JSON" "(two files run together?)" "$work/planted.json"
+
+# only_printable <text>: true when every byte of <text> is a newline or printable ASCII.
+only_printable() {
+    [ -z "$(printf '%s' "$1" | LC_ALL=C tr -d '\n\040-\176')" ]
+}
 
 esc=$(printf '\033')
+csi=$(printf '\233')
+csi_utf8=$(printf '\302\233')
+bel=$(printf '\007')
 {
-    sed "s/what=a test image/what=a ${esc}[2J test image/" "$work/one.block"
-    echo "speakboard-screenshot none name=x.jpg reason=${esc}[2J gone"
+    sed "s/what=a test image/what=a ${esc}[2J test ${csi}2J image/" "$work/one.block"
+    echo "speakboard-screenshot none name=x.jpg reason=${esc}[2J gone ${csi_utf8}2J"
 } | stamp > "$work/escape.log"
 out_escape="$work/out-escape"
-if output=$("$recover" "$work/escape.log" "$out_escape" 2>&1) && ! grep -q "$esc" <<< "$output" \
-    && grep -qF 'reason=?[2J gone' <<< "$output" && grep -qF 'matches. a ?[2J test image' <<< "$output" \
+if output=$("$recover" "$work/escape.log" "$out_escape" 2>&1) && only_printable "$output" \
+    && grep -qF 'reason=?[2J gone ??2J' <<< "$output" && grep -qF 'matches. a ?[2J test ?2J image' <<< "$output" \
     && cmp -s "$work/one.bin" "$out_escape/one.png"; then
-    echo "screenshots-from-log self-test: ok: control characters in a none line and a what text are shown as ? (pass)"
+    echo "screenshots-from-log self-test: ok: control characters, 8-bit ones too, in a none line and a what text are shown as ? (pass)"
 else
     echo "screenshots-from-log self-test: WRONG: control characters in a none line or a what text reached the output" >&2
     printf '%s\n' "$output" | od -c | head -n 20 | sed 's/^/    /' >&2
     wrong=$((wrong + 1))
 fi
 
+# KEY-69: the failure messages quote lines of the log; their control characters are shown as ? too.
+# check_escaped <description> <message> <log>: the recovery must fail with <message>, printing nothing but newlines
+# and printable ASCII.
+check_escaped() {
+    local output
+    if output=$("$recover" "$3" "$work/out$RANDOM$RANDOM" 2>&1); then
+        echo "screenshots-from-log self-test: WRONG: $1 (wanted fail, got pass)" >&2
+        wrong=$((wrong + 1))
+    elif ! grep -qF -- "$2" <<< "$output" || ! only_printable "$output"; then
+        echo "screenshots-from-log self-test: WRONG: $1 (did not fail with \"$2\", or printed a control character)" >&2
+        printf '%s\n' "$output" | od -c | head -n 20 | sed 's/^/    /' >&2
+        wrong=$((wrong + 1))
+    else
+        echo "screenshots-from-log self-test: ok: $1 (fail)"
+    fi
+}
+sed "s/^speakboard-screenshot begin name=one.png bytes=2000/& ${esc}[2J${csi}2J/" "$work/one.block" | stamp \
+    > "$work/escape-begin.log"
+check_escaped "a begin line with escape sequences, quoted in the failure message" \
+    "a begin line the reader cannot read: speakboard-screenshot begin name=one.png bytes=2000 ?[2J?2J" \
+    "$work/escape-begin.log"
+awk -v at=4 -v bad="${esc}]0;pwned${bel}" 'NR == at { $0 = bad } { print }' "$work/one.block" | stamp \
+    > "$work/escape-line.log"
+check_escaped "a block line that sets the terminal's title, quoted in the failure message" \
+    "not base64 of at most 76 characters (altered, or other output mixed in): ?]0;pwned?" "$work/escape-line.log"
+sed "s/^speakboard-screenshot end name=one.png/& ${csi_utf8}31m/" "$work/one.block" | stamp > "$work/escape-end.log"
+check_escaped "an end line with an 8-bit escape in UTF-8, quoted in the failure message" \
+    "ends with another name: speakboard-screenshot end name=one.png ??31m" "$work/escape-end.log"
+# The JSON reader's own failure message quotes an unknown escape, here a backslash then ESC ] 0 ; x BEL (review round 1,
+# finding 6).
+printf '{"job_id":1,"logs_content":"abc\\%s]0;x%s"}\n' "$esc" "$bel" > "$work/escape-json.json"
+check_escaped "an escape the JSON reader does not know, ESC and BEL, quoted in its failure message" \
+    "an escape \\? the JSON reader does not know" "$work/escape-json.json"
+
 stamp < "$work/before.txt" > "$work/empty.log"
 check fail "no blocks" "no screenshot blocks in the log" "$work/empty.log"
 
 printf '{"job_id":1,"message":"no content"}\n' > "$work/other.json"
 check fail "JSON that is not the job-log tool's" "has no \"logs_content\" string" "$work/other.json"
+
+# KEY-69: a SHA-256 that differs after the copy leaves the out folder as it was. Nothing on Linux makes a copy
+# differ (the case the check is for, two names on a case-insensitive file system, is refused before it), so a
+# sha256sum put first on the PATH answers wrongly on its fourth call: the second image's check after the copy, when
+# the first image has already been copied. What stays uncovered here is the real cause of such a difference.
+fake="$work/fake-bin"
+mkdir -p "$fake"
+cat > "$fake/sha256sum" << 'EOF'
+#!/bin/bash
+set -eu
+calls=$(($(cat "$FAKE_SHA_CALLS" 2> /dev/null || echo 0) + 1))
+echo "$calls" > "$FAKE_SHA_CALLS"
+if [ "$calls" = 4 ]; then
+    cat > /dev/null
+    echo "0000000000000000000000000000000000000000000000000000000000000000  -"
+elif [ -n "$FAKE_SHA_REAL" ]; then
+    "$FAKE_SHA_REAL"
+else
+    shasum -a 256
+fi
+EOF
+chmod +x "$fake/sha256sum"
+out_copy="$work/out-copy"
+mkdir "$out_copy"
+if output=$(FAKE_SHA_CALLS="$work/sha-calls" FAKE_SHA_REAL="$(command -v sha256sum || true)" PATH="$fake:$PATH" \
+    "$recover" "$work/two.log" "$out_copy" 2>&1); then
+    echo "screenshots-from-log self-test: WRONG: a SHA-256 that differs after the copy (wanted fail, got pass)" >&2
+    wrong=$((wrong + 1))
+elif ! grep -qF "two.jpg: SHA-256 0000000000000000000000000000000000000000000000000000000000000000 after the copy" \
+    <<< "$output" || [ -n "$(ls -A "$out_copy")" ] || ls -A "$work" | grep -qF '.out-copy.partial'; then
+    echo "screenshots-from-log self-test: WRONG: a SHA-256 that differs after the copy left images, or failed otherwise" >&2
+    echo "$output" | sed 's/^/    /' >&2
+    ls -lA "$out_copy" | sed 's/^/    /' >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: a SHA-256 that differs after the copy leaves the out folder empty (fail)"
+fi
 
 # The out folder must be new or empty.
 mkdir -p "$work/full"
@@ -284,6 +418,125 @@ elif ! grep -qF "speakboard-screenshot none name=shift-on-light.jpg reason=not i
     wrong=$((wrong + 1))
 else
     echo "screenshots-from-log self-test: ok: a group with a screenshot other than Apple's missing fails (fail)"
+fi
+
+# KEY-9: a capture of Apple's keyboard in its own group, the manifest group, and the groups as JSON for the matrix.
+apple="$work/apple"
+mkdir -p "$apple"
+head -c 3001 /dev/urandom > "$apple/apple-numbers-dark.png"
+printf '%s\t%s\n' apple-numbers-dark.png "Apple keyboard reference capture from a simulator; crop of rows 1574 to 2621" \
+    > "$apple/what.tsv"
+: > "$apple/none.txt"
+echo "speakboard-capture name=apple-numbers-dark.png state=numbers group=apple-numbers-dark" > "$apple/manifest.txt"
+printf '%s\n' keyboard-light manifest apple-numbers-dark apple-symbols-dark-top > "$apple/groups.txt"
+if "$emit" print "$apple" apple-numbers-dark > "$work/apple.out" 2>&1 && stamp < "$work/apple.out" > "$work/apple.log" \
+    && output=$("$recover" "$work/apple.log" "$work/apple-images" 2>&1) \
+    && cmp -s "$apple/apple-numbers-dark.png" "$work/apple-images/apple-numbers-dark.png"; then
+    echo "screenshots-from-log self-test: ok: a capture of Apple's keyboard printed by its own group is recovered (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: a capture of Apple's keyboard in its own group was not recovered" >&2
+    sed 's/^/    /' "$work/apple.out" >&2
+    wrong=$((wrong + 1))
+fi
+if "$emit" print "$apple" apple-symbols-dark-top > "$work/apple-missing.out" 2>&1; then
+    echo "screenshots-from-log self-test: WRONG: a group whose capture of Apple's keyboard is missing passed" >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: a group whose capture of Apple's keyboard is missing fails (fail)"
+fi
+if "$emit" print "$apple" manifest > "$work/manifest.out" 2>&1 \
+    && grep -qF "speakboard-capture name=apple-numbers-dark.png state=numbers" "$work/manifest.out"; then
+    echo "screenshots-from-log self-test: ok: the manifest group prints the manifest (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: the manifest group did not print the manifest" >&2
+    sed 's/^/    /' "$work/manifest.out" >&2
+    wrong=$((wrong + 1))
+fi
+if json=$("$emit" groups "$apple" 2>&1) \
+    && [ "$json" = '["keyboard-light","manifest","apple-numbers-dark","apple-symbols-dark-top"]' ]; then
+    echo "screenshots-from-log self-test: ok: the groups as JSON for the matrix (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: the groups as JSON: $json" >&2
+    wrong=$((wrong + 1))
+fi
+# KEY-9 review round 2, finding 4: a failed check of a capture is recorded, not fatal at once, and the capture's group
+# still prints its image, with the failed check above it. The image tool is stood in for by commands that exit 3 (the
+# check does not hold) and 0 (it holds); prepare itself runs only on macOS, so its last line (it fails, naming the
+# checks) is shown only on CI.
+if "$emit" check-recording "$apple" "apple-numbers-dark" "a stand-in check that does not hold" sh -c 'exit 3' \
+    > "$work/soft.out" 2>&1 \
+    && "$emit" check-recording "$apple" "apple-numbers-dark" "a stand-in check that holds" true >> "$work/soft.out" 2>&1 \
+    && [ "$(wc -l < "$apple/checks-failed.txt" | tr -d ' ')" = 1 ] \
+    && grep -qF "FAIL check: apple-numbers-dark: a stand-in check that does not hold (exit 3)" "$apple/checks-failed.txt" \
+    && "$emit" print "$apple" apple-numbers-dark > "$work/soft-print.out" 2>&1 \
+    && grep -qF "FAIL check: apple-numbers-dark: a stand-in check that does not hold" "$work/soft-print.out" \
+    && grep -qF "speakboard-screenshot begin name=apple-numbers-dark.png" "$work/soft-print.out"; then
+    echo "screenshots-from-log self-test: ok: a failed check is recorded, and its capture still prints, the failure above it (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: a failed check was not recorded and printed as it should be" >&2
+    cat "$work/soft.out" "$apple/checks-failed.txt" "$work/soft-print.out" 2> /dev/null | sed 's/^/    /' >&2
+    wrong=$((wrong + 1))
+fi
+echo 'apple-x"y' >> "$apple/groups.txt"
+if "$emit" groups "$apple" > /dev/null 2>&1; then
+    echo "screenshots-from-log self-test: WRONG: a group name with a quote went into the matrix's JSON" >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: a group name with a quote is refused (fail)"
+fi
+
+# KEY-9: the descriptions of the captures of Apple's keyboard, made by the same function prepare uses, from a facts
+# line as the UI test prints it, for every state and for a band, are printed as blocks and recovered. A character
+# the block refuses fails here (on 503073b, an apostrophe failed every printing job of a macOS run).
+facts='speakboard-apple-capture name=apple-STATE-dark.png state=STATE appearance=dark ios=27.2 model=iPhone19,2'
+facts="$facts window=402x874 keyboard=0.0,590.0,402.0,226.0 field=Ab behind=plain-system-background"
+facts="$facts device=iPhone 18 Pro"
+note='rows 1574 to 2621 of 1206x2622, 1206x1048, colour space kCGColorSpaceSRGB'
+described="$work/described"
+mkdir -p "$described"
+: > "$work/described.log"
+described_ok=1
+for state in letters-upper letters-lower caps-lock numbers symbols band; do
+    part="apple-$state-dark.png"
+    line=${facts//STATE/$state}
+    if [ "$state" = band ]; then
+        part="apple-numbers-dark-2-of-3.png"
+        line=${facts//STATE/numbers}
+    fi
+    head -c 1500 /dev/urandom > "$described/$part"
+    if ! what=$(GITHUB_RUN_ID=44807428543 GITHUB_SHA=06bdc67d3a4cde0c3edaf4c88801f8083ebbbcd7 \
+        "$emit" describe "$line" "$note" "apple-${state/band/numbers}-dark" "$part" 3 2>&1) \
+        || ! "$emit" emit "$part" "$described/$part" "$what" >> "$work/described.log" 2> "$work/described.err"; then
+        echo "screenshots-from-log self-test: WRONG: the description of $part cannot be printed: $what" >&2
+        sed 's/^/    /' "$work/described.err" >&2
+        described_ok=0
+    fi
+done
+if [ "$described_ok" = 1 ] && output=$("$recover" "$work/described.log" "$work/described-images" 2>&1) \
+    && cmp -s "$described/apple-numbers-dark-2-of-3.png" "$work/described-images/apple-numbers-dark-2-of-3.png" \
+    && grep -qF "matches. Apple keyboard reference capture from a simulator, iPhone 18 Pro (iPhone19,2), iOS 27.2, dark appearance, letters, caps lock; crop of rows 1574 to 2621" <<< "$output" \
+    && grep -qF "behind the keyboard: only the plain system background of the app; full resolution, lossless PNG; CI run 44807428543, commit 06bdc67d3a4cde0c3edaf4c88801f8083ebbbcd7; band 2-of-3 of apple-numbers-dark" <<< "$output" \
+    && [ "$(ls -A "$work/described-images" | wc -l | tr -d ' ')" = 6 ]; then
+    echo "screenshots-from-log self-test: ok: the descriptions of the captures of Apple's keyboard print and recover (pass)"
+else
+    echo "screenshots-from-log self-test: WRONG: the descriptions of the captures of Apple's keyboard did not print and recover" >&2
+    echo "$output" | sed 's/^/    /' >&2
+    wrong=$((wrong + 1))
+fi
+
+# describe refuses a description the block would refuse, here an apostrophe in the image tool's crop note, so prepare
+# fails on the Mac and not every printing job afterwards (review round 1, finding 7).
+line=${facts//STATE/numbers}
+if output=$("$emit" describe "$line" "rows 1574 to 2621 of 1206x2622, colour space Apple's P3" apple-numbers-dark \
+    apple-numbers-dark.png 3 2>&1); then
+    echo "screenshots-from-log self-test: WRONG: describe made a description the block refuses: $output" >&2
+    wrong=$((wrong + 1))
+elif ! grep -qF "the description of apple-numbers-dark.png has a character the block does not allow" <<< "$output"; then
+    echo "screenshots-from-log self-test: WRONG: describe refused a description, but not as it should" >&2
+    echo "$output" | sed 's/^/    /' >&2
+    wrong=$((wrong + 1))
+else
+    echo "screenshots-from-log self-test: ok: describe refuses a description the block would refuse (fail)"
 fi
 
 # The printer refuses what the block format does not allow.
