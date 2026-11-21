@@ -18,6 +18,25 @@ import XCTest
 // key, a plane or a state is not what it should be, if the card is still up, or if no on-screen keyboard is up (with
 // a hardware keyboard connected, iOS shows none).
 
+/// The keyboard's accessibility tree, from one snapshot, as a flat list; empty when no keyboard is up.
+@MainActor
+func keyboardTree(_ app: XCUIApplication) throws -> [KeyboardItem] {
+    let keyboard = app.keyboards.firstMatch
+    guard keyboard.exists else { return [] }
+    var found: [KeyboardItem] = []
+    func walk(_ snapshot: any XCUIElementSnapshot) {
+        found.append(
+            KeyboardItem(
+                type: snapshot.elementType, identifier: snapshot.identifier, label: snapshot.label,
+                value: snapshot.value.map { String(describing: $0) } ?? "", frame: snapshot.frame))
+        for child in snapshot.children {
+            walk(child)
+        }
+    }
+    walk(try keyboard.snapshot())
+    return found
+}
+
 /// One element of the keyboard's accessibility tree, as a snapshot gives it.
 struct KeyboardItem {
     let type: XCUIElement.ElementType
@@ -59,20 +78,7 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
 
     @MainActor
     func items(_ app: XCUIApplication) throws -> [KeyboardItem] {
-        let keyboard = app.keyboards.firstMatch
-        guard keyboard.exists else { return [] }
-        var found: [KeyboardItem] = []
-        func walk(_ snapshot: any XCUIElementSnapshot) {
-            found.append(
-                KeyboardItem(
-                    type: snapshot.elementType, identifier: snapshot.identifier, label: snapshot.label,
-                    value: snapshot.value.map { String(describing: $0) } ?? "", frame: snapshot.frame))
-            for child in snapshot.children {
-                walk(child)
-            }
-        }
-        walk(try keyboard.snapshot())
-        return found
+        try keyboardTree(app)
     }
 
     /// Logs the tree on one line (so the job log stays short): each element as type:identifier/label=value.
@@ -247,6 +253,47 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             try introduction(app).isEmpty, "the slide-to-type card is still up after three tries to dismiss it")
     }
 
+    /// The labels of the app's elements between the field and the keyboard's top, outside the keyboard's own tree:
+    /// where the suggestion bar's candidates would be, if the tree shows them.
+    @MainActor
+    func suggestionTexts(_ app: XCUIApplication, field: CGRect, keyboard: CGRect) throws -> [String] {
+        var texts: [String] = []
+        func walk(_ snapshot: any XCUIElementSnapshot) {
+            guard snapshot.elementType != .keyboard else { return }
+            let frame = snapshot.frame
+            if !snapshot.label.isEmpty && frame.minY >= field.maxY && frame.maxY <= keyboard.minY + 1
+                && frame.height > 0 && frame.height < 80
+            {
+                texts.append(snapshot.label)
+            }
+            for child in snapshot.children {
+                walk(child)
+            }
+        }
+        walk(try app.snapshot())
+        return texts
+    }
+
+    /// Before the first capture (KEY-70): its suggestion bar was sometimes empty, taken before the suggestions came.
+    /// Waits up to 10 seconds for the tree to show candidates above the keyboard, and never fails: if the tree shows
+    /// none, it says so and the capture is taken as it is.
+    @MainActor
+    func waitForSuggestions(_ app: XCUIApplication, field: XCUIElement) {
+        let keyboard = app.keyboards.firstMatch.frame
+        let start = Date()
+        repeat {
+            if let texts = try? suggestionTexts(app, field: field.frame, keyboard: keyboard), !texts.isEmpty {
+                let seconds = String(format: "%.1f", Date().timeIntervalSince(start))
+                say("suggestion candidates in the tree after \(seconds)s: \(texts)")
+                return
+            }
+            sleep(1)
+        } while Date().timeIntervalSince(start) < 10
+        say(
+            "the tree shows no suggestion candidates above the keyboard within 10s: the first capture is taken as it"
+                + " is, and its bar may be empty")
+    }
+
     /// The letters' case as the keys show it, "upper" or "lower" (from the Q key's label), or "unknown" when neither
     /// is found within `timeout` seconds. A query of two keys, much quicker than a snapshot of the tree.
     @MainActor
@@ -265,8 +312,23 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         return "unknown"
     }
 
+    /// The seconds from now until the letters show `wanted` case ("upper" or "lower"), as a query of the Q key
+    /// sees it (the time includes the query's own), or nil if they do not within `timeout` seconds (KEY-70).
+    @MainActor
+    func caseChange(_ app: XCUIApplication, to wanted: String, timeout: TimeInterval) -> TimeInterval? {
+        let key = app.keys.matching(NSPredicate(format: "label == %@", wanted == "upper" ? "Q" : "q")).firstMatch
+        let start = Date()
+        repeat {
+            if key.exists {
+                return Date().timeIntervalSince(start)
+            }
+        } while Date().timeIntervalSince(start) < timeout
+        return nil
+    }
+
     /// Taps Shift once at a time until two taps in a row each change the letters' case within `quick` seconds (the
-    /// keyboard answers quickly), or `bound` seconds pass, then leaves Shift off. Logs each tap's time.
+    /// keyboard answers quickly), or `bound` seconds pass, then leaves Shift off. Each tap waits for the case to
+    /// change (KEY-70: before, the time measured only how long a query took), and logs how long it took.
     @MainActor
     func waitForQuickShift(_ app: XCUIApplication, quick: TimeInterval = 1.5, bound: TimeInterval = 30) {
         let start = Date()
@@ -277,11 +339,15 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             let want = before == "upper" ? "lower" : "upper"
             let tapped = Date()
             tap(app, shift)
-            let now = letterCase(app, timeout: 3)
+            let changed = caseChange(app, to: want, timeout: 3)
             let seconds = Date().timeIntervalSince(tapped)
-            quickInARow = now == want && seconds <= quick ? quickInARow + 1 : 0
+            quickInARow = changed != nil && seconds <= quick ? quickInARow + 1 : 0
             let took = String(format: "%.2f", seconds)
-            say("a single tap on shift: \(before) to \(now) in \(took)s (\(quickInARow) quick in a row)")
+            let now = changed != nil ? want : letterCase(app, timeout: 1)
+            say(
+                "a single tap on shift: \(before) to \(now), "
+                    + (changed != nil ? "the case changed \(took)s after the tap" : "no change of case within 3s")
+                    + " (\(quickInARow) quick in a row)")
         }
         if letterCase(app, timeout: 2) == "upper",
             let shift = try? find(try items(app), "the shift key", { $0.isNamed(["shift"]) })
@@ -330,6 +396,7 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         try typeAndCheck(app, field, "a", expecting: "A")
         try delete(app, field, 1, expecting: emptyValues)
         log(try items(app), "letters, upper case")
+        waitForSuggestions(app, field: field)
         try capture(app, .lettersUpper, window: window, field: "empty")
 
         // 2. Letters, lower case: after "A", Shift is off mid-word; "b" typing "Ab" proves it.
@@ -342,18 +409,21 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
         // letter is lower case), and after deleting them it is still caps lock, which "e" typing "E" shows; deleted.
         // A synthesised double tap can land as two single taps on a loaded runner (run 44799266681, light: "cd"
         // typed "cd"), so it is tried again, the letters deleted back to "Ab" between tries (below).
-        // A double tap on Shift missed in 6 of 10 tries seen (round 2), always with Shift off right after it: one tap
-        // lost, or two taken as single taps (on, then off) on a keyboard slow to answer, as the first pass on a fresh
-        // simulator is. So before each try the keyboard must answer two single taps on Shift quickly; the tries
-        // alternate two public gestures; each logs its times and Shift's state straight after it. At most 6 tries, with
-        // a growing pause, and 300 seconds in all, so the step stays inside its 40 minutes.
+        // A double tap on Shift missed in about 7 of 13 coordinate double taps seen (KEY-9), always with Shift off
+        // right after it: likely two single taps (on, then off) on a keyboard slow to answer, as the first pass on a
+        // fresh simulator is; not shown. So before each try the keyboard must answer two single taps on Shift quickly
+        // (each waiting for the case to change); the tries alternate two public gestures, leading with the tighter
+        // tap(withNumberOfTaps: 2) on the Shift button (KEY-70: it spanned 0.45 s against 0.96 to 1.28 s for the
+        // coordinate doubleTap()), with the coordinate doubleTap() as the fallback; each logs its gesture, its times
+        // and Shift's state straight after it. At most 6 tries, with a pause of 1 to 5 s after a miss, and 240 seconds
+        // in all, so the step stays inside its limit (the sum is in .github/workflows/macos.yml).
         var capsLock = false
-        let capsDeadline = Date().addingTimeInterval(300)
+        let capsDeadline = Date().addingTimeInterval(240)
         for attempt in 1...6 where !capsLock && Date() < capsDeadline {
             waitForQuickShift(app)
             let shiftKey = try find(try items(app), "the shift key") { $0.isNamed(["shift"]) }
             let shiftElement = app.keyboards.buttons["shift"].firstMatch
-            let element = attempt % 2 == 0 && shiftElement.exists
+            let element = attempt % 2 == 1 && shiftElement.exists
             let gesture = element ? "tap(withNumberOfTaps: 2) on the shift button" : "doubleTap() on its coordinate"
             let before = Date().timeIntervalSince(testStart)
             if element {
@@ -381,14 +451,22 @@ final class AppleKeyboardCapturesUITests: XCTestCase {
             say("double tap \(attempt) on shift (\(gesture)), then cd: the field reads \(typed)")
             if typed == "AbCD" {
                 capsLock = true
-                say("caps lock from double tap \(attempt), \(gesture)")
+                say("caps lock from double tap \(attempt), \(gesture), in \(appearance) appearance")
             } else {
+                if letters == "lower" && value.isEmpty {
+                    say(
+                        "double tap \(attempt) missed: Shift was off right after it, likely two single taps"
+                            + " (on, then off)"
+                    )
+                }
                 try delete(app, field, max(typed.count - 2, 0), expecting: ["Ab"])
-                sleep(UInt32(attempt))
+                if attempt < 6 {
+                    sleep(UInt32(attempt))
+                }
             }
         }
         XCTAssertTrue(
-            capsLock, "no double tap on Shift gave caps lock in 6 tries or 300 seconds (see the speakboard-ui lines)")
+            capsLock, "no double tap on Shift gave caps lock in 6 tries or 240 seconds (see the speakboard-ui lines)")
         try delete(app, field, 2, expecting: ["Ab"])
         try typeAndCheck(app, field, "e", expecting: "AbE")
         try delete(app, field, 1, expecting: ["Ab"])
