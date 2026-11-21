@@ -23,7 +23,13 @@
 # once in dark appearance, into apple-<appearance>.log,
 # apple-<appearance>.xcresult and apple-<appearance>/, then deletes that
 # simulator. If they fail, the typing proof below still runs, and the script
-# fails at its end. Each simulator's hardware keyboard is set to disconnected
+# fails at its end. After both appearances' captures, on the same simulator, in
+# light appearance, it runs the measurements of Apple's keyboard (KEY-71), the
+# UI test AppleKeyboardMeasurementsUITests alone, into measure-light.log and
+# measure-light.xcresult: where taps near the keys' edges land, and what the
+# number and symbol keys type, as speakboard-measure lines, which the step
+# prints again as a block at its end. If they fail, the rest still runs, and
+# the script fails at its end. Each simulator's hardware keyboard is set to disconnected
 # first (below, "The hardware keyboard"). On any failure the script ends with a
 # short summary of the UI test logs.
 # With <derived data>, it then runs the typing proof, the
@@ -97,7 +103,7 @@ hardware_keyboard_off() {
 summary() {
     local log
     echo "sim-keyboard: summary of the UI test logs, at most 25 lines each:"
-    for log in "$out"/apple-*.log "$out"/ui-*.log; do
+    for log in "$out"/apple-*.log "$out"/measure-*.log "$out"/ui-*.log; do
         [ -f "$log" ] || continue
         echo "== $log"
         grep -E 'error:|Test Case .*(passed|failed|skipped)|speakboard-ui:|speakboard-apple-capture ' "$log" \
@@ -113,6 +119,16 @@ mark() {
     last=$SECONDS
 }
 
+# The measurements of Apple's keyboard (KEY-71), every speakboard-measure line, as a block near the end of the step's
+# log, so a short tail of the job's log holds them.
+measurements() {
+    local log="$out/measure-light.log"
+    [ -f "$log" ] || return 0
+    echo "sim-keyboard: the measurements of Apple's keyboard (KEY-71), $(grep -c 'speakboard-measure ' "$log" || true) lines:"
+    grep -o 'speakboard-measure .*' "$log" | cut -c 1-600 || true
+    echo "sim-keyboard: end of the measurements of Apple's keyboard"
+}
+
 capture_udid=""
 udid=""
 cleanup() {
@@ -124,6 +140,7 @@ cleanup() {
     if [ "$code" -ne 0 ]; then
         summary
     fi
+    measurements
     echo "sim-keyboard: where the time went:$times total ${SECONDS}s"
 }
 trap cleanup EXIT
@@ -135,6 +152,7 @@ trap cleanup EXIT
 # They run only when SPEAKBOARD_CAPTURES is true, or unset (by hand); the workflow sets it from
 # scripts/captures-needed.sh, with the reason in SPEAKBOARD_CAPTURES_WHY.
 apple_status=0
+measure_status=0
 captures=no
 if [ -n "$derived" ] && [ "${SPEAKBOARD_CAPTURES:-true}" = true ]; then
     captures=yes
@@ -180,6 +198,24 @@ if [ "$captures" = yes ]; then
             apple_status=1
         fi
     done
+    # The measurements (KEY-71), after all ten captures, so a failed measurement cannot cost a capture.
+    xcrun simctl ui "$capture_udid" appearance light
+    echo "sim-keyboard: measurements of Apple's keyboard in light appearance: xcodebuild starts at $(date '+%H:%M:%S')"
+    status=0
+    TEST_RUNNER_SPEAKBOARD_APPEARANCE=light TEST_RUNNER_SPEAKBOARD_APPLE_MEASUREMENTS=1 xcodebuild \
+        -project Speakboard.xcodeproj -scheme SpeakboardUITests -destination "id=$capture_udid" \
+        -derivedDataPath "$derived" -only-testing:SpeakboardUITests/AppleKeyboardMeasurementsUITests \
+        -resultBundlePath "$out/measure-light.xcresult" test > "$out/measure-light.log" 2>&1 || status=$?
+    echo "sim-keyboard: measurements of Apple's keyboard in light appearance: xcodebuild ended at $(date '+%H:%M:%S')"
+    mark "measurements light"
+    # Their speakboard-measure lines are printed once, as a block at the step's end.
+    grep -E 'speakboard-ui:|error:|Test Case .*(started|passed|failed|skipped)|TEST (SUCCEEDED|FAILED)' \
+        "$out/measure-light.log" | cut -c 1-3000 || true
+    if [ "$status" -ne 0 ] || grep -q 'Test Case .*skipped' "$out/measure-light.log"; then
+        echo "sim-keyboard: FAIL: the measurements of Apple's keyboard failed (see $out/measure-light.log);" \
+            "the typing proof still runs" >&2
+        measure_status=1
+    fi
     xcrun simctl shutdown "$capture_udid" > /dev/null 2>&1 || true
     xcrun simctl delete "$capture_udid" > /dev/null 2>&1 || true
     capture_udid=""
@@ -345,7 +381,11 @@ if [ -n "$derived" ]; then
         echo "sim-keyboard: FAIL: the captures of Apple's keyboard failed (see the FAIL lines above)" >&2
         exit 1
     fi
+    if [ "$measure_status" -ne 0 ]; then
+        echo "sim-keyboard: FAIL: the measurements of Apple's keyboard failed (see the FAIL line above)" >&2
+        exit 1
+    fi
     if [ "$captures" = yes ]; then
-        echo "sim-keyboard: OK: the captures of Apple's keyboard, in light and dark appearance"
+        echo "sim-keyboard: OK: the captures of Apple's keyboard, in light and dark appearance, and the measurements"
     fi
 fi

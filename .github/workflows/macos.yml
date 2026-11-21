@@ -243,6 +243,18 @@ jobs:
             "the screenshots jobs would be skipped" >&2
           exit 1
 
+      # KEY-71: the measurements of Apple's keyboard again, as the apple job's last lines, so a short tail of its log
+      # holds them (the simulator step prints them at its end too, but the steps after it add about 175 lines).
+      - name: The measurements of Apple's keyboard
+        if: always()
+        run: |
+          log="$OUT/screenshots/measure-light.log"
+          if [ -f "$log" ]; then
+            grep -o 'speakboard-measure .*' "$log" | cut -c 1-600 || true
+          else
+            echo "speakboard-measure: none in this run (no $log)"
+          fi
+
   # KEY-68: the screenshots as text in job logs an agent can read whole. Agents cannot download artifacts (KEY-54),
   # and GitHub's job-log tool returns at most the last 5,000 lines of a job's log, so each group of images is
   # printed by its own small job whose whole log fits in those 5,000 lines (each prints at most its budget of 4,600
