@@ -52,9 +52,10 @@ env:
 jobs:
   apple:
     runs-on: xcode-27
-    # The simulator step has its own 40-minute limit (below). The job's other steps took at most about 16 minutes on
-    # the runs of KEY-9 (make check-native 5, the build 1, the unit tests up to 8, the rest 2), so 75 leaves room.
-    timeout-minutes: 75
+    # The simulator step has its own 70-minute limit (below). The job's other steps took at most about 16 minutes on
+    # the runs of KEY-9 (make check-native 5, the build 1, the unit tests up to 8, the rest 2), so 16 + 70 + about 2
+    # for the steps after it is 88, and 100 leaves room.
+    timeout-minutes: 100
     outputs:
       # The prepared screenshots' artifact id, set only when they were uploaded: the screenshots jobs run on it.
       screenshots-artifact: ${{ steps.upload-log-images.outputs.artifact-id }}
@@ -164,9 +165,14 @@ jobs:
 
       - name: The keyboard in the simulator, screenshots and the typing proof
         id: sim
-        # Its own limit (KEY-9): the slowest run with captures took 32.5 minutes here (503073b). A slow run then
-        # fails this step inside the job's 75 minutes, and the steps after it (prepare, upload) still run.
-        timeout-minutes: 40
+        # Its own limit (KEY-9, KEY-70, KEY-71). The slowest run with captures took 32.5 minutes here (503073b). The
+        # worst case, in minutes: the slowest other phases seen (capture simulator 1.5, its deletion 0.3, the proof's
+        # simulator 10, the typing proofs 3.8 and 2.2) 17.8; both appearances' captures with the caps-lock loop at its
+        # 240-second limit (light about 13, dark about 8.5: KEY-9 review round 3's 14.1 and 9.3 with the loop's 60
+        # seconds less) and the wait for the first capture's suggestions (up to about 0.3 each), 22; the measurements'
+        # 20-minute budget plus xcodebuild and the app's launch (about 3), 23. In all about 63, so 70. A slow run then
+        # fails this step inside the job's 100 minutes, and the steps after it (prepare, upload) still run.
+        timeout-minutes: 70
         env:
           SPEAKBOARD_CAPTURES: ${{ steps.captures.outputs.captures }}
           SPEAKBOARD_CAPTURES_WHY: ${{ steps.captures.outputs.why }}
@@ -237,6 +243,18 @@ jobs:
             "the screenshots jobs would be skipped" >&2
           exit 1
 
+      # KEY-71: the measurements of Apple's keyboard again, as the apple job's last lines, so a short tail of its log
+      # holds them (the simulator step prints them at its end too, but the steps after it add about 175 lines).
+      - name: The measurements of Apple's keyboard
+        if: always()
+        run: |
+          log="$OUT/screenshots/measure-light.log"
+          if [ -f "$log" ]; then
+            grep -o 'speakboard-measure .*' "$log" | cut -c 1-600 || true
+          else
+            echo "speakboard-measure: none in this run (no $log)"
+          fi
+
   # KEY-68: the screenshots as text in job logs an agent can read whole. Agents cannot download artifacts (KEY-54),
   # and GitHub's job-log tool returns at most the last 5,000 lines of a job's log, so each group of images is
   # printed by its own small job whose whole log fits in those 5,000 lines (each prints at most its budget of 4,600
@@ -248,7 +266,7 @@ jobs:
     name: screenshots (${{ matrix.group }})
     needs: apple
     # Only when the apple job uploaded the prepared screenshots (at least one image), whether it then passed or
-    # failed, the simulator step's own 40-minute timeout included (a step that times out fails, and the prepare and
+    # failed, the simulator step's own 70-minute timeout included (a step that times out fails, and the prepare and
     # upload steps after it still run): an apple job that fails before then leaves no artifact, and these jobs would
     # only add failures that say nothing. Not in a cancelled run (KEY-69): its prepare and upload steps still run,
     # as always() steps do on a cancel, but nobody is waiting for the images. In this job's condition, cancelled() is
