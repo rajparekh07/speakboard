@@ -27,6 +27,8 @@
 # printed as it is. Git still quotes a name with a double quote, a backslash
 # or a control character, so a leading quote is dropped before the match; a
 # control character never reaches the output, which names only the entries.
+# The match ignores letter case (KEY-70): the macOS runner's file system does
+# not, so a path such as apple/app/x.swift is checked out inside Apple/App/.
 set -euo pipefail
 
 # The files the captures depend on, and the folders (ending in /) whose every
@@ -66,17 +68,24 @@ answer() {
     exit 0
 }
 
-# hits <from> <to>: the entries of the list that the changes from <from> to <to> touch, space separated. Fails if git
-# cannot list the changes.
+# lower <text>: the text with ASCII letters in lower case.
+lower() {
+    printf '%s' "$1" | LC_ALL=C tr 'A-Z' 'a-z'
+}
+
+# hits <from> <to>: the entries of the list that the changes from <from> to <to> touch, space separated, compared in
+# lower case. Fails if git cannot list the changes.
 hits() {
-    local changed path entry found=""
+    local changed path entry key found=""
     changed=$(git -c core.quotePath=false diff --no-renames --name-only "$1" "$2") || return 1
+    changed=$(lower "$changed")
     while IFS= read -r entry; do
+        key=$(lower "$entry")
         while IFS= read -r path; do
             path=${path#\"}
-            case "$entry" in
-                */) [ "${path#"$entry"}" != "$path" ] || continue ;;
-                *) [ "$path" = "$entry" ] || continue ;;
+            case "$key" in
+                */) [ "${path#"$key"}" != "$path" ] || continue ;;
+                *) [ "$path" = "$key" ] || continue ;;
             esac
             found="$found $entry"
             break

@@ -108,6 +108,16 @@ mkdir -p Apple/App
 echo x > 'Apple/App/a"b.swift'
 quote=$(commit "a double quote in a name")
 check "a file with a double quote in its name under Apple/App" true "Apple/App/" push "" "$base" "$quote" main
+# KEY-70: a path that differs from an entry only in letter case lands inside it on the Mac's file system.
+git checkout -q -b case "$base"
+mkdir -p apple/app
+echo x > apple/app/Lower.swift
+lettercase=$(commit "a path in another letter case")
+check "a file under apple/app (Apple/App/ in another letter case)" true "Apple/App/" push "" "$base" "$lettercase" main
+git checkout -q -b case2 "$base"
+echo x > Project.yml
+lettercase2=$(commit "a file named like an entry in another letter case")
+check "a file Project.yml (project.yml in another letter case)" true "project.yml" push "" "$base" "$lettercase2" main
 
 # The branch's whole difference from main.
 git checkout -q -b work "$base"
@@ -127,7 +137,39 @@ check "a branch with no capture file changed since main" false "neither the push
 check "a branch equal to main" false "neither the push nor the branch since main" push "" "$base" "$base" plain
 git update-ref -d refs/remotes/origin/main
 check "a docs-only push with no origin/main" true "no origin/main" push "" "$plain1" "$plain2" plain
+# KEY-70: an origin/main unrelated to the branch (an orphan commit): no merge base.
+git checkout -q --orphan unrelated
+git rm -rq --cached . > /dev/null
+echo other > unrelated.txt
+git add unrelated.txt
+orphan=$(git -c user.name=selftest -c user.email=selftest@example.invalid commit -q -m "orphan" && git rev-parse HEAD)
+git update-ref refs/remotes/origin/main "$orphan"
+check "a docs-only push with an unrelated origin/main (no merge base)" true "no merge base with origin/main: fail safe" \
+    push "" "$plain1" "$plain2" plain
 git update-ref refs/remotes/origin/main "$base"
+git checkout -q -f plain
+git clean -qfd
+
+# KEY-70: git diff failing, from a git stub first on PATH that fails `diff` (when STUB_FAIL_FROM is set, only when
+# its arguments hold that commit) and runs the real git for everything else.
+real_git=$(command -v git)
+mkdir -p "$work/stub"
+cat > "$work/stub/git" << EOF
+#!/bin/bash
+for argument in "\$@"; do
+    if [ "\$argument" = diff ]; then
+        if [ -z "\${STUB_FAIL_FROM:-}" ] || [ "\${*/\$STUB_FAIL_FROM/}" != "\$*" ]; then
+            exit 128
+        fi
+    fi
+done
+exec "$real_git" "\$@"
+EOF
+chmod +x "$work/stub/git"
+PATH="$work/stub:$PATH" STUB_FAIL_FROM="" check "a push whose git diff fails" true \
+    "git could not list what the push changes: fail safe" push "" "$plain1" "$plain2" plain
+PATH="$work/stub:$PATH" STUB_FAIL_FROM="$base" check "a push whose git diff of the branch since main fails" true \
+    "git could not list what the branch changes from main: fail safe" push "" "$plain1" "$plain2" plain
 
 # A push to main uses its own range only.
 check "a push to main whose range changes a capture file" true "the push itself changes" push "" "$base" "$early" main
